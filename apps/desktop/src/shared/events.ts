@@ -60,7 +60,6 @@ export interface CompanionSettings {
   clickThrough: boolean;
   petEnabled: boolean;
   petScale: number;
-  windowScale: number;
   petOpacity: number;
   clawdScale: number;
   clawdOpacity: number;
@@ -120,7 +119,6 @@ export const defaultSettings: CompanionSettings = {
   clickThrough: false,
   petEnabled: true,
   petScale: 1,
-  windowScale: 1,
   petOpacity: 1,
   clawdScale: 1,
   clawdOpacity: 1,

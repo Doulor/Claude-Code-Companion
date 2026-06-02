@@ -57,11 +57,11 @@ function loadSettings(): CompanionSettings {
 
 function saveSettings(next: Partial<CompanionSettings>) {
   const previousPort = settings.port;
-  const previousScale = settings.windowScale;
+  const previousScale = settings.petScale;
   settings = { ...settings, ...next };
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
   app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, path: process.execPath });
-  if (petWindow && (settings.windowScale ?? settings.petScale) !== (previousScale ?? settings.petScale)) {
+  if (petWindow && settings.petScale !== previousScale) {
     const size = petWindowSize();
     petWindow.setSize(size.width, size.height);
     const [xNow, yNow] = petWindow.getPosition();
@@ -88,7 +88,7 @@ function rendererUrl(route: "pet" | "settings") {
 }
 
 function petWindowSize() {
-  const scale = settings.windowScale || settings.petScale;
+  const scale = settings.petScale;
   return {
     width: Math.round(260 * scale),
     height: Math.round(392 * scale)
