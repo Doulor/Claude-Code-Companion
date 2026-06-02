@@ -163,7 +163,7 @@ function useCompanion() {
 
 function PetApp() {
   const { settings, updateSettings, currentEvent, petState, toolRibbon } = useCompanion();
-  const [editMode, setEditMode] = useState(false);
+  const editMode = settings.editPosition;
   const [dragTarget, setDragTarget] = useState<string | null>(null);
   const dragOrigin = useRef<{ mouseX: number; mouseY: number; offX: number; offY: number } | null>(null);
 
@@ -201,6 +201,16 @@ function PetApp() {
 
   return (
     <main className={`pet-stage ${editMode ? "edit-mode" : ""}`}>
+      {editMode ? (
+        <div className="edit-guides">
+          <div className="guide guide-clawd" />
+          <div className="guide guide-bubble" />
+          <div className="guide guide-ribbon" />
+          <div className="guide-label guide-label-clawd">Clawd 默认位置</div>
+          <div className="guide-label guide-label-bubble">气泡/卡片 默认位置</div>
+          <div className="guide-label guide-label-ribbon">工具条 默认位置</div>
+        </div>
+      ) : null}
       <section
         className="pet-anchor"
         style={{ transform: `translateX(-50%) scale(${settings.petScale})`, opacity: settings.petOpacity }}
@@ -219,9 +229,6 @@ function PetApp() {
           </div>
         ) : null}
       </section>
-      <button className={`pet-edit-btn ${editMode ? "active" : ""}`} title={editMode ? "完成调整" : "调整位置"} onClick={() => setEditMode(!editMode)}>
-        {editMode ? "✓" : "✎"}
-      </button>
     </main>
   );
 }
@@ -454,6 +461,8 @@ function SettingsApp() {
           <Toggle label="完全点击穿透" checked={settings.clickThrough} onChange={clickThrough => updateSettings({ clickThrough })} />
           <Toggle label="显示气泡" checked={settings.showBubbles} onChange={showBubbles => updateSettings({ showBubbles })} />
           <Toggle label="显示状态道具" checked={settings.showStatusProp} onChange={showStatusProp => updateSettings({ showStatusProp })} />
+          <Toggle label="编辑桌宠位置" checked={settings.editPosition} onChange={editPosition => updateSettings({ editPosition })} />
+          {settings.editPosition ? <button className="inline-action" onClick={() => updateSettings({ positionOffsets: {} })}>重置位置</button> : null}
           <Slider label="整体尺寸" min={0.7} max={1.45} step={0.05} value={settings.petScale} format={value => `${Math.round(value * 100)}%`} onChange={petScale => updateSettings({ petScale })} />
           <Slider label="Clawd尺寸" min={0.7} max={1.35} step={0.05} value={settings.clawdScale} format={value => `${Math.round(value * 100)}%`} onChange={clawdScale => updateSettings({ clawdScale })} />
           <Slider label="Clawd透明" min={0.45} max={1} step={0.05} value={settings.clawdOpacity} format={value => `${Math.round(value * 100)}%`} onChange={clawdOpacity => updateSettings({ clawdOpacity })} />

@@ -55,6 +55,7 @@ export interface CompanionSettings {
   token: string;
   privacyMode: PrivacyMode;
   showBubbles: boolean;
+  editPosition: boolean;
   alwaysOnTop: boolean;
   clickThrough: boolean;
   petEnabled: boolean;
@@ -105,6 +106,7 @@ export const defaultSettings: CompanionSettings = {
   token: "clawd-local",
   privacyMode: "safe",
   showBubbles: true,
+  editPosition: false,
   alwaysOnTop: true,
   clickThrough: false,
   petEnabled: true,

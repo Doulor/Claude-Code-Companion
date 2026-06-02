@@ -75,6 +75,31 @@ button { border: 0; cursor: pointer; }
 }
 .pet-edit-btn:hover { background: var(--honey); transform: translateY(-1px); }
 .pet-edit-btn.active { background: var(--coral); color: #fff; border-color: rgba(217, 107, 90, 0.4); }
+.edit-guides {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.guide {
+  position: absolute;
+  border: 1.5px dashed rgba(215, 119, 87, 0.45);
+  border-radius: 6px;
+  background: rgba(215, 119, 87, 0.04);
+}
+.guide-clawd { left: 50%; bottom: 0; width: 226px; height: 238px; transform: translateX(-50%); }
+.guide-bubble { left: 50%; top: 10px; width: 240px; height: 104px; transform: translateX(-50%); }
+.guide-ribbon { left: 10px; bottom: 24px; width: 140px; height: 140px; }
+.guide-label {
+  position: absolute;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--amber);
+  white-space: nowrap;
+}
+.guide-label-clawd { left: 50%; bottom: 242px; transform: translateX(-50%); }
+.guide-label-bubble { left: 50%; top: 118px; transform: translateX(-50%); }
+.guide-label-ribbon { left: 16px; bottom: 168px; }
 .pet-anchor {
   position: absolute;
   left: 50%;
