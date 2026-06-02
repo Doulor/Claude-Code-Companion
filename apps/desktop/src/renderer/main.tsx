@@ -132,10 +132,10 @@ function useCompanion() {
         setCurrentEvent(event);
       }
       if (event.event === "tool_start" || event.event === "tool_end") {
-        setToolRibbon(previous => [event, ...previous].slice(0, 4));
+        setToolRibbon(previous => [event, ...previous].slice(0, 8));
         window.setTimeout(() => {
           setToolRibbon(previous => previous.filter(e => e.id !== event.id));
-        }, 5000);
+        }, 3500);
       }
       const timeout = (event.event === "done" || event.event === "error" ? 5.2 : event.event === "tool_end" ? 2 : settings.bubbleDuration) * 1000;
       window.setTimeout(() => {
@@ -226,18 +226,37 @@ const toolColorMap: Record<string, string> = {
   Unknown: "steel"
 };
 
+const toolIconMap: Record<string, string> = {
+  Read: "R",
+  Edit: "E",
+  Write: "W",
+  Bash: "B",
+  Grep: "G",
+  Glob: "G",
+  WebFetch: "W",
+  Task: "T",
+  Unknown: "?"
+};
+
 function ToolRibbon({ events, settings }: { events: CompanionEvent[]; settings: CompanionSettings }) {
   return (
     <div className="tool-ribbon" style={{ transform: `scale(${settings.bubbleScale})`, opacity: settings.bubbleOpacity }}>
-      {events.map((event, index) => {
+      {events.slice(0, 5).map((event, index) => {
         const tool = event.tool ?? "Unknown";
         const color = toolColorMap[tool] ?? "steel";
         const isEnd = event.event === "tool_end";
+        const icon = toolIconMap[tool] ?? "?";
         return (
-          <span key={event.id} className={`ribbon-pill color-${color} ${isEnd ? "pill-end" : "pill-start"}`} style={{ animationDelay: `${index * 40}ms` }}>
-            <i />
-            <b>{tool}</b>
-          </span>
+          <div
+            key={event.id}
+            className={`ribbon-row color-${color} ${isEnd ? "ribbon-done" : ""}`}
+            style={{ animationDelay: `${index * 35}ms` }}
+          >
+            <span className="ribbon-dot" />
+            <code className="ribbon-icon">{icon}</code>
+            <span className="ribbon-label">{tool}</span>
+            {event.detail ? <span className="ribbon-detail">{event.detail}</span> : null}
+          </div>
         );
       })}
     </div>

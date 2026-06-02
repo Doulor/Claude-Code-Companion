@@ -176,7 +176,7 @@ function postEvent(event: CompanionEvent): Promise<void> {
         "content-length": Buffer.byteLength(body),
         "authorization": `Bearer ${token}`
       },
-      timeout: 1200
+      timeout: 3000
     }, (res: IncomingMessage) => {
       res.resume();
       res.on("end", resolve);
@@ -198,6 +198,7 @@ async function main() {
   await postEvent(normalize(payload));
 }
 
-main().catch(() => {
+main().catch((error) => {
+  process.stderr.write(`[clawd] forward error: ${error instanceof Error ? error.message : String(error)}\n`);
   process.exit(0);
 });
