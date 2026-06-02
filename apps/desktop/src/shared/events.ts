@@ -32,7 +32,7 @@ export type PetState =
   | "error";
 
 export type PrivacyMode = "safe" | "standard" | "detailed";
-export type FeedbackMode = "thought" | "card";
+export type FeedbackMode = "thought" | "card" | "ribbon";
 
 export type ClientType = "cli" | "desktop" | "vscode" | "unknown";
 
@@ -70,6 +70,7 @@ export interface CompanionSettings {
   bubbleOpacity: number;
   bubbleDuration: number;
   feedbackModes: Partial<Record<PetState, FeedbackMode>>;
+  toolFeedbackModes: Partial<Record<ToolName, FeedbackMode>>;
   showStatusProp: boolean;
   launchAtLogin: boolean;
   openSettingsOnStart: boolean;
@@ -115,14 +116,15 @@ export const defaultSettings: CompanionSettings = {
   bubbleDuration: 8,
   feedbackModes: {
     thinking: "thought",
-    tool_read: "thought",
-    tool_edit: "thought",
-    tool_bash: "thought",
-    tool_search: "thought",
+    tool_read: "ribbon",
+    tool_edit: "ribbon",
+    tool_bash: "ribbon",
+    tool_search: "ribbon",
     waiting_permission: "card",
     done: "card",
     error: "card"
   },
+  toolFeedbackModes: {},
   showStatusProp: true,
   launchAtLogin: false,
   openSettingsOnStart: true,

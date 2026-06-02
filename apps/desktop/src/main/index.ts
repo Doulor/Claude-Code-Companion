@@ -47,7 +47,8 @@ function loadSettings(): CompanionSettings {
   return {
     ...defaultSettings,
     ...stored,
-    feedbackModes: { ...defaultSettings.feedbackModes, ...(stored.feedbackModes ?? {}) }
+    feedbackModes: { ...defaultSettings.feedbackModes, ...(stored.feedbackModes ?? {}) },
+    toolFeedbackModes: { ...defaultSettings.toolFeedbackModes, ...(stored.toolFeedbackModes ?? {}) }
   };
 }
 

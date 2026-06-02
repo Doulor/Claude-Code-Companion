@@ -24,7 +24,7 @@ import {
   Wrench,
   X
 } from "lucide-react";
-import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings, FeedbackMode, PetState, PrivacyMode } from "../shared/events";
+import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings, FeedbackMode, PetState, PrivacyMode, ToolName } from "../shared/events";
 import { defaultSettings, stateFromEvent } from "../shared/events";
 import clawdImage from "./clawd.png";
 import "./styles.css";
@@ -51,6 +51,24 @@ const sampleEvents: CompanionEvent[] = [
   makeEvent("permission_wait", "manual", "需要确认", "Claude Code 正在等待你的许可。"),
   makeEvent("done", "manual", "处理完成", "这一轮已经结束。"),
   makeEvent("error", "manual", "执行失败", "有一个工具调用没有成功。")
+];
+
+function getFeedbackMode(event: CompanionEvent, settings: CompanionSettings): FeedbackMode {
+  if (event.tool && event.tool !== "Unknown" && settings.toolFeedbackModes?.[event.tool]) {
+    return settings.toolFeedbackModes[event.tool]!;
+  }
+  return settings.feedbackModes?.[stateFromEvent(event)] ?? "card";
+}
+
+const toolFeedbackRows: Array<{ tool: ToolName; label: string }> = [
+  { tool: "Read", label: "读取文件" },
+  { tool: "Edit", label: "编辑文件" },
+  { tool: "Write", label: "写入文件" },
+  { tool: "Bash", label: "执行命令" },
+  { tool: "Grep", label: "搜索内容" },
+  { tool: "Glob", label: "搜索文件" },
+  { tool: "WebFetch", label: "抓取网页" },
+  { tool: "Task", label: "子任务" }
 ];
 
 const feedbackRows: Array<{ state: PetState; label: string }> = [
@@ -100,6 +118,7 @@ function useCompanion() {
   const [events, setEvents] = useState<CompanionEvent[]>([]);
   const [currentEvent, setCurrentEvent] = useState<CompanionEvent | null>(null);
   const [petState, setPetState] = useState<PetState>("idle");
+  const [toolRibbon, setToolRibbon] = useState<CompanionEvent[]>([]);
 
   useEffect(() => {
     void window.companion.getSettings().then(setSettings);
@@ -111,6 +130,12 @@ function useCompanion() {
       setPetState(stateFromEvent(event));
       if (event.event !== "tool_end") {
         setCurrentEvent(event);
+      }
+      if (event.event === "tool_start" || event.event === "tool_end") {
+        setToolRibbon(previous => [event, ...previous].slice(0, 4));
+        window.setTimeout(() => {
+          setToolRibbon(previous => previous.filter(e => e.id !== event.id));
+        }, 5000);
       }
       const timeout = (event.event === "done" || event.event === "error" ? 5.2 : event.event === "tool_end" ? 2 : settings.bubbleDuration) * 1000;
       window.setTimeout(() => {
@@ -130,11 +155,11 @@ function useCompanion() {
     setSettings(saved);
   }
 
-  return { settings, updateSettings, connection, events, currentEvent, petState };
+  return { settings, updateSettings, connection, events, currentEvent, petState, toolRibbon };
 }
 
 function PetApp() {
-  const { settings, currentEvent, petState } = useCompanion();
+  const { settings, currentEvent, petState, toolRibbon } = useCompanion();
 
   if (!settings.petEnabled) return <main className="pet-stage pet-disabled" />;
 
@@ -144,8 +169,9 @@ function PetApp() {
         className="pet-anchor"
         style={{ transform: `translateX(-50%) scale(${settings.petScale})`, opacity: settings.petOpacity }}
       >
-        {settings.showBubbles && currentEvent ? <Bubble event={currentEvent} state={stateFromEvent(currentEvent)} settings={settings} /> : null}
+        {settings.showBubbles && currentEvent && getFeedbackMode(currentEvent, settings) !== "ribbon" ? <Bubble event={currentEvent} state={stateFromEvent(currentEvent)} settings={settings} /> : null}
         <Clawd state={petState} settings={settings} />
+        {settings.showBubbles && toolRibbon.length > 0 ? <ToolRibbon events={toolRibbon} settings={settings} /> : null}
       </section>
     </main>
   );
@@ -153,7 +179,7 @@ function PetApp() {
 
 function Bubble({ event, state, settings }: { event: CompanionEvent; state: PetState; settings: CompanionSettings }) {
   const toolLabel = event.tool && event.tool !== "Unknown" ? event.tool : event.source === "claude-code" ? "Claude Code" : "Manual";
-  const feedbackMode = settings.feedbackModes?.[state] ?? "card";
+  const feedbackMode = getFeedbackMode(event, settings);
   if (feedbackMode === "thought") {
     return (
       <div className="thought-wrapper" style={{ transform: `scale(${settings.thoughtScale})`, opacity: settings.thoughtOpacity }}>
@@ -184,6 +210,36 @@ function Bubble({ event, state, settings }: { event: CompanionEvent; state: PetS
         </footer>
       </div>
     </section>
+    </div>
+  );
+}
+
+const toolColorMap: Record<string, string> = {
+  Read: "mint",
+  Edit: "coral",
+  Write: "coral",
+  Bash: "ink",
+  Grep: "blue",
+  Glob: "blue",
+  WebFetch: "blue",
+  Task: "steel",
+  Unknown: "steel"
+};
+
+function ToolRibbon({ events, settings }: { events: CompanionEvent[]; settings: CompanionSettings }) {
+  return (
+    <div className="tool-ribbon" style={{ transform: `scale(${settings.bubbleScale})`, opacity: settings.bubbleOpacity }}>
+      {events.map((event, index) => {
+        const tool = event.tool ?? "Unknown";
+        const color = toolColorMap[tool] ?? "steel";
+        const isEnd = event.event === "tool_end";
+        return (
+          <span key={event.id} className={`ribbon-pill color-${color} ${isEnd ? "pill-end" : "pill-start"}`} style={{ animationDelay: `${index * 40}ms` }}>
+            <i />
+            <b>{tool}</b>
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -354,6 +410,21 @@ function SettingsApp() {
           </div>
         </Panel>
 
+        <Panel title="工具显示方式" icon={<Wrench size={18} />}>
+          <p className="note" style={{ marginTop: 0, marginBottom: 12 }}>为每种工具单独设置显示方式。优先级高于上方的状态显示设置。设为"跟随状态"则使用上方的默认设置。</p>
+          {toolFeedbackRows.map(row => (
+            <div key={row.tool} className="feedback-mode-row">
+              <span>{row.label}</span>
+              <div>
+                <button className={!settings.toolFeedbackModes?.[row.tool] ? "active" : ""} onClick={() => { const next = { ...(settings.toolFeedbackModes ?? {}) }; delete next[row.tool]; updateSettings({ toolFeedbackModes: next }); }}>跟随</button>
+                <button className={settings.toolFeedbackModes?.[row.tool] === "thought" ? "active" : ""} onClick={() => updateSettings({ toolFeedbackModes: { ...(settings.toolFeedbackModes ?? {}), [row.tool]: "thought" } })}>气泡</button>
+                <button className={settings.toolFeedbackModes?.[row.tool] === "card" ? "active" : ""} onClick={() => updateSettings({ toolFeedbackModes: { ...(settings.toolFeedbackModes ?? {}), [row.tool]: "card" } })}>卡片</button>
+                <button className={settings.toolFeedbackModes?.[row.tool] === "ribbon" ? "active" : ""} onClick={() => updateSettings({ toolFeedbackModes: { ...(settings.toolFeedbackModes ?? {}), [row.tool]: "ribbon" } })}>条</button>
+              </div>
+            </div>
+          ))}
+        </Panel>
+
         <Panel id="privacy" title="隐私和端口" icon={<Shield size={18} />}>
           <Field label="事件端口">
             <input value={settings.port} onChange={event => updateSettings({ port: Number(event.target.value) || defaultSettings.port })} />
@@ -436,6 +507,7 @@ function FeedbackModeRow({ label, value, onChange }: { label: string; value: Fee
       <div>
         <button className={value === "thought" ? "active" : ""} onClick={() => onChange("thought")}>气泡</button>
         <button className={value === "card" ? "active" : ""} onClick={() => onChange("card")}>卡片</button>
+        <button className={value === "ribbon" ? "active" : ""} onClick={() => onChange("ribbon")}>条</button>
       </div>
     </div>
   );
