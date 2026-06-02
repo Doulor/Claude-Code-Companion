@@ -1,6 +1,6 @@
 {
   "name": "claude-code-companion",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Clawd Companion - Claude Code 桌宠伴侣，实时显示工具调用和会话状态。",
   "author": "Doulor",
