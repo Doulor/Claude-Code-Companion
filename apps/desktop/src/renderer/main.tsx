@@ -197,6 +197,11 @@ function PetApp() {
           else ns = ox + (dx + dy) / 652;
           updateSettings({ windowScale: Math.max(0.7, Math.min(2.5, ns)) });
         }
+      } else if (key === "view") {
+        void window.companion.dragPetTo(
+          window.screenX + e.clientX - mx,
+          window.screenY + e.clientY - my
+        );
       } else {
         const nx = ox + e.clientX - mx;
         const ny = oy + e.clientY - my;
@@ -245,7 +250,8 @@ function PetApp() {
     const rh = Math.round(144 * settings.bubbleScale);
 
     return (
-      <main className="pet-stage edit-mode" style={{ background: "rgba(215, 119, 87, 0.06)" }}>
+      <main className="pet-stage edit-mode" style={{ background: "rgba(215, 119, 87, 0.06)" }}
+        onMouseDown={e => { if (e.target === e.currentTarget) begin("view", e); }}>
         {/* 四条边的 resize 手柄：拖动调整窗口整体大小 */}
         <span className="edge-handle edge-n" onMouseDown={e => beginResize("edgeN", e)} />
         <span className="edge-handle edge-s" onMouseDown={e => beginResize("edgeS", e)} />
@@ -566,7 +572,7 @@ function SettingsApp() {
           <Toggle label="显示气泡" checked={settings.showBubbles} onChange={showBubbles => updateSettings({ showBubbles })} />
           <Toggle label="显示状态道具" checked={settings.showStatusProp} onChange={showStatusProp => updateSettings({ showStatusProp })} />
           <Toggle label="编辑桌宠位置" checked={settings.editPosition} onChange={editPosition => updateSettings({ editPosition })} />
-          {settings.editPosition ? <button className="inline-action" onClick={() => updateSettings({ positionOffsets: {} })}>重置位置</button> : null}
+          {settings.editPosition ? <button className="inline-action" onClick={() => updateSettings({ positionOffsets: {}, zoneSizes: {}, windowScale: 1 })}>重置全部</button> : null}
           <Slider label="整体尺寸" min={0.7} max={1.45} step={0.05} value={settings.petScale} format={value => `${Math.round(value * 100)}%`} onChange={petScale => updateSettings({ petScale })} />
           <Slider label="Clawd尺寸" min={0.7} max={1.35} step={0.05} value={settings.clawdScale} format={value => `${Math.round(value * 100)}%`} onChange={clawdScale => updateSettings({ clawdScale })} />
           <Slider label="Clawd透明" min={0.45} max={1} step={0.05} value={settings.clawdOpacity} format={value => `${Math.round(value * 100)}%`} onChange={clawdOpacity => updateSettings({ clawdOpacity })} />
