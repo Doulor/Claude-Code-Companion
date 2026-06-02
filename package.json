@@ -1,0 +1,34 @@
+{
+  "name": "claude-code-companion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A Clawd-inspired desktop companion for Claude Code tool activity and completion notifications.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "dev:electron": "concurrently -k \"npm run dev\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "build": "tsc -p tsconfig.json && vite build && npm run build:forwarder",
+    "build:forwarder": "tsc -p apps/hook-forwarder/tsconfig.json",
+    "start": "electron .",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/hook-forwarder/tsconfig.json --noEmit"
+  },
+  "main": "dist/main/index.js",
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "concurrently": "latest",
+    "cross-env": "latest",
+    "electron": "latest",
+    "lucide-react": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "wait-on": "latest",
+    "ws": "latest",
+    "@types/ws": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@types/node": "latest"
+  },
+  "devDependencies": {}
+}
