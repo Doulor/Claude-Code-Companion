@@ -82,12 +82,15 @@ export interface CompanionSettings {
     clawd?: { x: number; y: number };
     bubble?: { x: number; y: number };
     ribbon?: { x: number; y: number };
+    view?: { x: number; y: number };
   };
   zoneSizes?: {
     clawd?: { w: number; h: number };
     bubble?: { w: number; h: number };
     ribbon?: { w: number; h: number };
   };
+  zoneViewW?: number;
+  zoneViewH?: number;
 }
 
 export interface CompanionConnectionStatus {
