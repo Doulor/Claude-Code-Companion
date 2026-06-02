@@ -69,8 +69,13 @@ function saveSettings(next: Partial<CompanionSettings>) {
     petWindow.setPosition(clamped.x, clamped.y);
   }
   if (petWindow) {
-    if (settings.petEnabled) petWindow.show();
-    else petWindow.hide();
+    if (settings.petEnabled) {
+      petWindow.setOpacity(1);
+      petWindow.show();
+    } else {
+      petWindow.setOpacity(0);
+      petWindow.hide();
+    }
   }
   keepPetOnTop();
   petWindow?.setIgnoreMouseEvents(settings.clickThrough, { forward: true });
@@ -106,6 +111,7 @@ function clampPetPosition(x: number, y: number) {
 
 function keepPetOnTop() {
   if (!petWindow || petWindow.isDestroyed() || !settings.alwaysOnTop) return;
+  if (!settings.petEnabled) return;
   petWindow.setAlwaysOnTop(true, "screen-saver");
   petWindow.moveTop();
 }
@@ -360,7 +366,9 @@ function emitEvent(event: CompanionEvent) {
   activeSessionId = event.sessionId ?? activeSessionId;
   activeClientType = event.clientType ?? activeClientType;
   activeClientLabel = event.clientLabel ?? activeClientLabel;
-  if (settings.petEnabled && petWindow && !petWindow.isDestroyed() && !petWindow.isVisible()) petWindow.show();
+  if (settings.petEnabled && petWindow && !petWindow.isDestroyed()) {
+    if (!petWindow.isVisible()) { petWindow.setOpacity(1); petWindow.show(); }
+  }
   petWindow?.webContents.send("companion:event", event);
   settingsWindow?.webContents.send("companion:event", event);
   wsServer?.clients.forEach(client => client.send(JSON.stringify({ type: "event", payload: event })));
