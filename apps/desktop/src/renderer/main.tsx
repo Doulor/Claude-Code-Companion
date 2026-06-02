@@ -193,8 +193,8 @@ function PetApp() {
         }
       } else if (key === "view") {
         void window.companion.dragPetTo(
-          window.screenX + e.clientX - mx,
-          window.screenY + e.clientY - my
+          ox + e.screenX - mx,
+          oy + e.screenY - my
         );
       } else {
         const nx = ox + e.clientX - mx;
@@ -220,7 +220,11 @@ function PetApp() {
     if (!editMode) return;
     e.stopPropagation();
     dragging.current = k;
-    dragStart.current = { mx: e.clientX, my: e.clientY, ox: offsets[k as keyof typeof offsets]?.x ?? 0, oy: offsets[k as keyof typeof offsets]?.y ?? 0 };
+    if (k === "view") {
+      dragStart.current = { mx: e.screenX, my: e.screenY, ox: window.screenX, oy: window.screenY };
+    } else {
+      dragStart.current = { mx: e.clientX, my: e.clientY, ox: offsets[k as keyof typeof offsets]?.x ?? 0, oy: offsets[k as keyof typeof offsets]?.y ?? 0 };
+    }
   }
 
   function beginResize(k: string, e: React.MouseEvent) {
