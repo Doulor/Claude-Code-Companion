@@ -1,9 +1,10 @@
 import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, Notification, screen } from "electron";
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { WebSocketServer } from "ws";
-import { appendFileSync, readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { homedir } from "node:os";
 import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings } from "../shared/events.js";
 import { defaultSettings } from "../shared/events.js";
 
@@ -388,10 +389,149 @@ function broadcastSettings() {
   wsServer?.clients.forEach(client => client.send(JSON.stringify({ type: "settings", payload: settings })));
 }
 
+// Hooks 管理
+const claudeSettingsPath = join(homedir(), ".claude", "settings.json");
+const backupPath = join(homedir(), ".claude", "settings.clawd-backup.json");
+const REQUIRED_HOOK_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification", "Stop"] as const;
+
+interface HooksStatus {
+  installed: boolean;
+  configExists: boolean;
+  hookCount: number;
+  requiredCount: number;
+  missingEvents: string[];
+  commandMatches: boolean;
+}
+
+function getHookCommand(): string {
+  const devPath = join(__dirname, "../../dist/hook-forwarder/index.js");
+  const prodPath = join(process.resourcesPath, "dist/hook-forwarder/index.js");
+  return `node ${existsSync(devPath) ? devPath : prodPath}`;
+}
+
+function checkHooks(): HooksStatus {
+  if (!existsSync(claudeSettingsPath)) {
+    return { installed: false, configExists: false, hookCount: 0, requiredCount: 6, missingEvents: [...REQUIRED_HOOK_EVENTS], commandMatches: false };
+  }
+
+  const settingsJson = JSON.parse(readFileSync(claudeSettingsPath, "utf8"));
+  const hooks = settingsJson.hooks ?? {};
+  const expectedCommand = getHookCommand();
+  const missing: string[] = [];
+  let commandOk = true;
+  let count = 0;
+
+  for (const eventName of REQUIRED_HOOK_EVENTS) {
+    const entries = hooks[eventName];
+    if (!entries || !Array.isArray(entries) || entries.length === 0) {
+      missing.push(eventName);
+    } else {
+      count++;
+      const hookCmd = entries[0]?.hooks?.[0]?.command;
+      if (hookCmd !== expectedCommand) commandOk = false;
+    }
+  }
+
+  return {
+    installed: missing.length === 0 && commandOk,
+    configExists: true,
+    hookCount: count,
+    requiredCount: 6,
+    missingEvents: missing,
+    commandMatches: commandOk
+  };
+}
+
+function installHooks(): { success: boolean; error?: string } {
+  try {
+    let settingsJson: Record<string, unknown> = {};
+    if (existsSync(claudeSettingsPath)) {
+      settingsJson = JSON.parse(readFileSync(claudeSettingsPath, "utf8"));
+      copyFileSync(claudeSettingsPath, backupPath);
+    }
+
+    const command = getHookCommand();
+    const hookEntry = { matcher: "*", hooks: [{ type: "command", command }] };
+
+    settingsJson.hooks = settingsJson.hooks ?? {};
+    for (const eventName of REQUIRED_HOOK_EVENTS) {
+      (settingsJson.hooks as Record<string, unknown[]>)[eventName] = [hookEntry];
+    }
+
+    const dir = join(homedir(), ".claude");
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+
+    writeFileSync(claudeSettingsPath, JSON.stringify(settingsJson, null, 2));
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function repairHooks(): { success: boolean; fixed: string[]; error?: string } {
+  try {
+    if (!existsSync(claudeSettingsPath)) {
+      const result = installHooks();
+      return { ...result, fixed: result.success ? [...REQUIRED_HOOK_EVENTS] : [] };
+    }
+
+    const settingsJson = JSON.parse(readFileSync(claudeSettingsPath, "utf8"));
+    copyFileSync(claudeSettingsPath, backupPath);
+
+    const command = getHookCommand();
+    const hookEntry = { matcher: "*", hooks: [{ type: "command", command }] };
+    const fixed: string[] = [];
+
+    settingsJson.hooks = settingsJson.hooks ?? {};
+    for (const eventName of REQUIRED_HOOK_EVENTS) {
+      const entries = (settingsJson.hooks as Record<string, unknown[]>)[eventName];
+      const needsFix = !entries || !Array.isArray(entries) || entries.length === 0 ||
+        (entries[0] as any)?.hooks?.[0]?.command !== command;
+
+      if (needsFix) {
+        (settingsJson.hooks as Record<string, unknown[]>)[eventName] = [hookEntry];
+        fixed.push(eventName);
+      }
+    }
+
+    writeFileSync(claudeSettingsPath, JSON.stringify(settingsJson, null, 2));
+    return { success: true, fixed };
+  } catch (error) {
+    return { success: false, fixed: [], error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function removeHooks(): { success: boolean; error?: string } {
+  try {
+    if (!existsSync(claudeSettingsPath)) return { success: true };
+
+    const settingsJson = JSON.parse(readFileSync(claudeSettingsPath, "utf8"));
+    copyFileSync(claudeSettingsPath, backupPath);
+
+    if (settingsJson.hooks) {
+      for (const eventName of REQUIRED_HOOK_EVENTS) {
+        delete settingsJson.hooks[eventName];
+      }
+      if (Object.keys(settingsJson.hooks).length === 0) {
+        delete settingsJson.hooks;
+      }
+    }
+
+    writeFileSync(claudeSettingsPath, JSON.stringify(settingsJson, null, 2));
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 ipcMain.handle("settings:get", () => settings);
 ipcMain.handle("settings:save", (_, next: Partial<CompanionSettings>) => saveSettings(next));
 ipcMain.handle("connection:get", () => getConnectionStatus());
 ipcMain.handle("event:test", (_, event: CompanionEvent) => emitEvent(event));
+ipcMain.handle("hooks:check", () => checkHooks());
+ipcMain.handle("hooks:install", () => installHooks());
+ipcMain.handle("hooks:repair", () => repairHooks());
+ipcMain.handle("hooks:remove", () => removeHooks());
 ipcMain.handle("window:open-settings", () => createSettingsWindow());
 ipcMain.handle("window:minimize-settings", () => settingsWindow?.minimize());
 ipcMain.handle("window:toggle-maximize-settings", () => {

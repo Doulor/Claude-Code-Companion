@@ -17,6 +17,7 @@
   --mint: #72a98c;
   --steel: #45697b;
   --blue: #6d93a7;
+  --purple: #9b7dc2;
   --black: #17120f;
   --shadow: 0 24px 80px rgba(38, 28, 19, 0.16);
   font-family: "Clawd Display", "Segoe UI", sans-serif;
@@ -193,6 +194,7 @@ button { border: 0; cursor: pointer; }
 .thought-tool_edit i { background: var(--coral); box-shadow: 0 0 10px rgba(217, 107, 90, 0.46); }
 .thought-tool_search i,
 .thought-thinking i { background: var(--blue); }
+.thought-tool_mcp i { background: var(--blue); }
 
 .bubble-wrapper {
   position: absolute;
@@ -320,6 +322,7 @@ button { border: 0; cursor: pointer; }
 .bubble-tool_edit .bubble-status-light,
 .bubble-error .bubble-status-light { background: var(--coral); box-shadow: 0 0 14px rgba(217, 107, 90, 0.58); }
 .bubble-tool_bash .bubble-status-light { background: var(--black); box-shadow: 0 0 14px rgba(23, 18, 15, 0.5); }
+.bubble-tool_mcp .bubble-status-light { background: var(--blue); box-shadow: 0 0 14px rgba(109, 147, 167, 0.55); }
 .bubble-waiting_permission .bubble-status-light { background: var(--honey); box-shadow: 0 0 14px rgba(234, 187, 88, 0.68); animation: status-pulse 900ms steps(2, end) infinite; }
 .bubble-done {
   border-color: rgba(114, 169, 140, 0.55);
@@ -393,6 +396,11 @@ button { border: 0; cursor: pointer; }
 
 /* tool_search: slow scan, similar to read but with slight rotation */
 .clawd-tool_search {
+  animation: clawd-scan 2.4s ease-in-out infinite;
+}
+
+/* tool_mcp: MCP tool call, reuse scan animation */
+.clawd-tool_mcp {
   animation: clawd-scan 2.4s ease-in-out infinite;
 }
 
@@ -530,6 +538,8 @@ button { border: 0; cursor: pointer; }
 .color-ink { border-left-color: var(--black); color: var(--black); }
 .color-blue { border-left-color: var(--blue); color: var(--blue); }
 .color-steel { border-left-color: var(--steel); color: var(--steel); }
+.color-honey { border-left-color: var(--honey); color: var(--honey); }
+.color-purple { border-left-color: var(--purple); color: var(--purple); }
 
 @keyframes ribbon-slide {
   from { opacity: 0; transform: translateX(-12px); }
@@ -565,6 +575,7 @@ button { border: 0; cursor: pointer; }
 .read-prop { background: var(--mint); }
 .edit-prop { background: var(--coral); }
 .terminal-prop { background: var(--black); }
+.mcp-prop { background: var(--blue); }
 .idle-prop { background: var(--steel); }
 .clawd-thinking .clawd-glow, .clawd-tool_bash .clawd-glow, .clawd-tool_edit .clawd-glow, .clawd-tool_read .clawd-glow, .clawd-tool_search .clawd-glow { animation-duration: 1.1s; }
 
@@ -788,6 +799,41 @@ input[type="range"]:focus { box-shadow: none; }
 .event-row small { color: var(--muted); font-size: 12px; }
 .event-row em { min-height: 26px; display: grid; place-items: center; border-radius: 999px; font-style: normal; font-size: 12px; color: var(--ink); background: rgba(234, 187, 88, 0.24); }
 .empty { min-height: 112px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); background: rgba(36, 29, 23, 0.05); }
+
+/* Hooks Manager */
+.hooks-manager { display: grid; gap: 12px; }
+.hooks-detail { display: grid; gap: 4px; }
+.hooks-detail span { font-size: 13px; color: var(--muted); }
+.hooks-missing { color: var(--coral); }
+.hooks-mismatch { color: var(--honey); }
+.hooks-actions { display: flex; gap: 8px; margin-top: 8px; }
+.hooks-actions button {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 8px;
+  color: #fff5d9;
+  background: var(--black);
+  font-weight: 700;
+  transition: transform 150ms ease, background 150ms ease;
+}
+.hooks-actions button:hover:not(:disabled) { transform: translateY(-1px); background: #4a3a2c; }
+.hooks-actions button:disabled { opacity: .5; cursor: not-allowed; }
+.hooks-actions button.danger {
+  color: var(--coral);
+  background: rgba(217, 107, 90, 0.12);
+  border: 1px solid rgba(217, 107, 90, 0.3);
+}
+.hooks-actions button.danger:hover:not(:disabled) {
+  background: rgba(217, 107, 90, 0.2);
+}
+.hooks-result {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.42);
+  border: 1px solid var(--line);
+}
 
 @keyframes pixel-bob { 0%, 100% { translate: 0 0; } 50% { translate: 0 -8px; } }
 @keyframes status-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }

@@ -2,6 +2,15 @@
 
 import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings } from "../shared/events";
 
+interface HooksStatus {
+  installed: boolean;
+  configExists: boolean;
+  hookCount: number;
+  requiredCount: number;
+  missingEvents: string[];
+  commandMatches: boolean;
+}
+
 declare global {
   interface Window {
     companion: {
@@ -9,6 +18,10 @@ declare global {
       saveSettings: (settings: Partial<CompanionSettings>) => Promise<CompanionSettings>;
       getConnectionStatus: () => Promise<CompanionConnectionStatus>;
       sendTestEvent: (event: CompanionEvent) => Promise<void>;
+      checkHooks: () => Promise<HooksStatus>;
+      installHooks: () => Promise<{ success: boolean; error?: string }>;
+      repairHooks: () => Promise<{ success: boolean; fixed: string[]; error?: string }>;
+      removeHooks: () => Promise<{ success: boolean; error?: string }>;
       openSettings: () => Promise<void>;
       minimizeSettings: () => Promise<void>;
       toggleMaximizeSettings: () => Promise<void>;

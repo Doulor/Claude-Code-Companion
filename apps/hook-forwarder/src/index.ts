@@ -4,7 +4,7 @@ import { request, type IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
 
 type HookPayload = Record<string, unknown>;
-type ToolName = "Read" | "Edit" | "Write" | "Bash" | "Grep" | "Glob" | "WebFetch" | "Task" | "Unknown";
+type ToolName = "Read" | "Edit" | "Write" | "Bash" | "Grep" | "Glob" | "WebFetch" | "WebSearch" | "Notebook" | "Agent" | "Skill" | "Task" | "MCP" | "Unknown";
 type EventType = "session_start" | "prompt_submit" | "tool_start" | "tool_end" | "notification" | "permission_wait" | "done" | "error";
 type ClientType = "cli" | "desktop" | "vscode" | "unknown";
 
@@ -73,10 +73,23 @@ function clientFromPayload(payload: HookPayload): { clientType: ClientType; clie
 function toolName(payload: HookPayload): ToolName {
   const input = asObject(payload.tool_input);
   const raw = text(payload.tool_name) ?? text(payload.toolName) ?? text(input.name) ?? "Unknown";
-  if (["Read", "Edit", "Write", "Bash", "Grep", "Glob", "WebFetch", "Task", "TaskCreate", "TaskUpdate"].includes(raw)) {
+
+  // 精确匹配已知内置工具
+  const KNOWN_TOOLS = [
+    "Read", "Edit", "Write", "Bash", "Grep", "Glob", "WebFetch",
+    "WebSearch", "Notebook", "Agent", "Skill",
+    "TaskCreate", "TaskUpdate", "Task"
+  ];
+  if (KNOWN_TOOLS.includes(raw)) {
     if (raw === "TaskCreate" || raw === "TaskUpdate") return "Task";
     return raw as ToolName;
   }
+
+  // MCP 工具前缀匹配
+  if (raw.startsWith("mcp__")) {
+    return "MCP";
+  }
+
   return "Unknown";
 }
 
@@ -89,10 +102,21 @@ function basename(pathLike: string | undefined): string | undefined {
 function detailForTool(payload: HookPayload, tool: ToolName): string | undefined {
   if (privacyMode === "safe") return undefined;
   const input = asObject(payload.tool_input);
-  if (tool === "Read" || tool === "Edit" || tool === "Write") return basename(text(input.file_path) ?? text(input.path));
+  if (tool === "Read" || tool === "Edit" || tool === "Write" || tool === "Notebook") return basename(text(input.file_path) ?? text(input.path));
   if (tool === "Grep") return text(input.pattern) ? "pattern: " + text(input.pattern) : undefined;
   if (tool === "Glob") return text(input.pattern) ? "pattern: " + text(input.pattern) : undefined;
+  if (tool === "WebSearch") return text(input.query) ? "query: " + text(input.query) : undefined;
   if (tool === "Bash") return privacyMode === "detailed" ? summarizeCommand(text(input.command)) : undefined;
+  if (tool === "Agent") {
+    const prompt = text(input.prompt);
+    return prompt ? (prompt.length > 40 ? prompt.slice(0, 37) + "..." : prompt) : undefined;
+  }
+  if (tool === "Skill") return text(input.skill) ?? text(input.name);
+  if (tool === "MCP") {
+    const raw = text(payload.tool_name) ?? "";
+    const parts = raw.split("__");
+    if (parts.length >= 3) return `MCP: ${parts[1]}/${parts.slice(2).join("__")}`;
+  }
   return undefined;
 }
 
@@ -159,10 +183,14 @@ function normalize(payload: HookPayload): CompanionEvent {
 }
 
 function titleForTool(tool: ToolName): string {
-  if (tool === "Read") return "正在读文件";
+  if (tool === "Read" || tool === "Notebook") return "正在读文件";
   if (tool === "Edit" || tool === "Write") return "正在编辑代码";
   if (tool === "Bash") return "正在执行命令";
   if (tool === "Grep" || tool === "Glob" || tool === "WebFetch") return "正在搜索";
+  if (tool === "WebSearch") return "正在搜索网络";
+  if (tool === "Agent") return "正在调用子代理";
+  if (tool === "Skill") return "正在使用技能";
+  if (tool === "MCP") return "正在使用 MCP 工具";
   return "正在使用工具";
 }
 

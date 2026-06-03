@@ -6,7 +6,12 @@ export type ToolName =
   | "Grep"
   | "Glob"
   | "WebFetch"
+  | "WebSearch"
+  | "Notebook"
+  | "Agent"
+  | "Skill"
   | "Task"
+  | "MCP"
   | "Unknown";
 
 export type CompanionEventType =
@@ -27,6 +32,7 @@ export type PetState =
   | "tool_edit"
   | "tool_bash"
   | "tool_search"
+  | "tool_mcp"
   | "waiting_permission"
   | "done"
   | "error";
@@ -149,7 +155,12 @@ export const defaultSettings: CompanionSettings = {
     Grep: "ribbon",
     Glob: "ribbon",
     WebFetch: "ribbon",
-    Task: "ribbon"
+    WebSearch: "ribbon",
+    Notebook: "ribbon",
+    Agent: "ribbon",
+    Skill: "ribbon",
+    Task: "ribbon",
+    MCP: "ribbon"
   },
   showStatusProp: true,
   launchAtLogin: false,
@@ -171,10 +182,12 @@ export function stateFromEvent(event: CompanionEvent): PetState {
   if (event.event === "done") return "done";
   if (event.event === "prompt_submit" || event.event === "session_start") return "thinking";
   if (event.event === "tool_start") {
-    if (event.tool === "Read") return "tool_read";
+    if (event.tool === "Read" || event.tool === "Notebook") return "tool_read";
     if (event.tool === "Edit" || event.tool === "Write") return "tool_edit";
     if (event.tool === "Bash") return "tool_bash";
-    if (event.tool === "Grep" || event.tool === "Glob" || event.tool === "WebFetch") return "tool_search";
+    if (event.tool === "Grep" || event.tool === "Glob" || event.tool === "WebFetch" || event.tool === "WebSearch") return "tool_search";
+    if (event.tool === "MCP") return "tool_mcp";
+    if (event.tool === "Agent" || event.tool === "Skill") return "thinking";
     return "thinking";
   }
   if (event.event === "notification") return "waiting_permission";

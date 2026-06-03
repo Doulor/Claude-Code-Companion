@@ -37,6 +37,7 @@ const clawdGifName: Record<PetState, string> = {
   tool_edit: "working_hardhat",
   tool_bash: "working_hardhat",
   tool_search: "thinking_speech",
+  tool_mcp: "thinking_speech",
   waiting_permission: "permission_prompt",
   done: "celebrate_bunny",
   error: "error_dead"
@@ -49,6 +50,7 @@ const stateCopy: Record<PetState, { label: string; line: string; tone: string }>
   tool_edit: { label: "编辑", line: "正在改代码", tone: "coral" },
   tool_bash: { label: "终端", line: "正在执行命令", tone: "ink" },
   tool_search: { label: "搜索", line: "正在检索线索", tone: "blue" },
+  tool_mcp: { label: "MCP", line: "正在调用 MCP 工具", tone: "blue" },
   waiting_permission: { label: "等待确认", line: "需要你处理一个确认", tone: "honey" },
   done: { label: "完成", line: "这一轮已经处理完", tone: "green" },
   error: { label: "出错", line: "刚才有一步失败了", tone: "coral" }
@@ -81,7 +83,12 @@ const toolFeedbackRows: Array<{ tool: ToolName; label: string }> = [
   { tool: "Grep", label: "搜索内容" },
   { tool: "Glob", label: "搜索文件" },
   { tool: "WebFetch", label: "抓取网页" },
-  { tool: "Task", label: "子任务" }
+  { tool: "WebSearch", label: "网络搜索" },
+  { tool: "Notebook", label: "笔记本" },
+  { tool: "Agent", label: "子代理" },
+  { tool: "Skill", label: "技能" },
+  { tool: "Task", label: "子任务" },
+  { tool: "MCP", label: "MCP 工具" }
 ];
 
 const feedbackRows: Array<{ state: PetState; label: string }> = [
@@ -98,10 +105,12 @@ const feedbackRows: Array<{ state: PetState; label: string }> = [
 const mappingRows: Array<{ source: string; tool?: string; state: PetState; title: string }> = [
   { source: "SessionStart", state: "thinking", title: "会话开始" },
   { source: "UserPromptSubmit", state: "thinking", title: "收到用户输入" },
-  { source: "PreToolUse", tool: "Read", state: "tool_read", title: "读取文件" },
+  { source: "PreToolUse", tool: "Read / Notebook", state: "tool_read", title: "读取文件" },
   { source: "PreToolUse", tool: "Edit / Write", state: "tool_edit", title: "修改文件" },
   { source: "PreToolUse", tool: "Bash", state: "tool_bash", title: "执行命令" },
-  { source: "PreToolUse", tool: "Grep / Glob / WebFetch", state: "tool_search", title: "搜索资料" },
+  { source: "PreToolUse", tool: "Grep / Glob / WebFetch / WebSearch", state: "tool_search", title: "搜索资料" },
+  { source: "PreToolUse", tool: "MCP", state: "tool_mcp", title: "MCP 工具" },
+  { source: "PreToolUse", tool: "Agent / Skill", state: "thinking", title: "子代理 / 技能" },
   { source: "Notification", state: "waiting_permission", title: "等待确认" },
   { source: "Stop", state: "done", title: "处理完成" },
   { source: "转发失败", state: "error", title: "异常提示" }
@@ -132,6 +141,14 @@ function useCompanion() {
   const [currentEvent, setCurrentEvent] = useState<CompanionEvent | null>(null);
   const [petState, setPetState] = useState<PetState>("idle");
   const [toolRibbon, setToolRibbon] = useState<CompanionEvent[]>([]);
+  const ribbonTimers = useRef<Map<string, number>>(new Map());
+  const ribbonTimestamps = useRef<Map<string, number>>(new Map());
+
+  function removeRibbonEntry(eventId: string) {
+    setToolRibbon(previous => previous.filter(e => e.id !== eventId));
+    ribbonTimers.current.delete(eventId);
+    ribbonTimestamps.current.delete(eventId);
+  }
 
   useEffect(() => {
     void window.companion.getSettings().then(setSettings);
@@ -140,16 +157,54 @@ function useCompanion() {
     const offConnection = window.companion.onConnection(setConnection);
     const offEvent = window.companion.onEvent(event => {
       setEvents(previous => [event, ...previous].slice(0, settings.eventHistoryLimit));
-      if (event.event !== "tool_end") setPetState(stateFromEvent(event));
-      if (event.event !== "tool_end") {
+
+      // tool_end 处理：找到匹配的 tool_start 并移除 ribbon 条目
+      if (event.event === "tool_end") {
+        const matchingStart = toolRibbon.find(
+          e => e.event === "tool_start" && e.tool === event.tool
+        );
+        if (matchingStart) {
+          const addedAt = ribbonTimestamps.current.get(matchingStart.id) ?? Date.now();
+          const elapsed = Date.now() - addedAt;
+          const MIN_DISPLAY_MS = 800;
+
+          // 清除保底超时
+          const fallbackId = ribbonTimers.current.get(matchingStart.id);
+          if (fallbackId) window.clearTimeout(fallbackId);
+          ribbonTimers.current.delete(matchingStart.id);
+
+          if (elapsed >= MIN_DISPLAY_MS) {
+            // 已显示够久，立即移除
+            removeRibbonEntry(matchingStart.id);
+          } else {
+            // 还没到最少显示时间，延迟移除
+            const delay = MIN_DISPLAY_MS - elapsed;
+            const delayTimeout = window.setTimeout(() => {
+              removeRibbonEntry(matchingStart.id);
+            }, delay);
+            ribbonTimers.current.set(matchingStart.id, delayTimeout);
+          }
+        }
+        // tool_end 不改变 petState 和 currentEvent
+      } else {
+        // 非 tool_end 事件：更新状态和当前事件
+        setPetState(stateFromEvent(event));
         setCurrentEvent(event);
       }
+
+      // tool_start 处理：添加到 ribbon 并设置保底超时
       if (event.event === "tool_start") {
         setToolRibbon(previous => [event, ...previous].slice(0, 8));
-        window.setTimeout(() => {
-          setToolRibbon(previous => previous.filter(e => e.id !== event.id));
-        }, 4000);
+        ribbonTimestamps.current.set(event.id, Date.now());
+
+        // 设置保底超时：如果 tool_end 一直不来，最长显示 10 秒
+        const fallbackTimeout = window.setTimeout(() => {
+          removeRibbonEntry(event.id);
+        }, 10_000);
+        ribbonTimers.current.set(event.id, fallbackTimeout);
       }
+
+      // 状态回退定时器
       const timeout = (event.event === "done" || event.event === "error" ? 5.2 : settings.bubbleDuration) * 1000;
       window.setTimeout(() => {
         setPetState(current => current === stateFromEvent(event) ? "idle" : current);
@@ -160,6 +215,10 @@ function useCompanion() {
       offSettings();
       offConnection();
       offEvent();
+      // 清理所有 ribbon 定时器
+      ribbonTimers.current.forEach(id => window.clearTimeout(id));
+      ribbonTimers.current.clear();
+      ribbonTimestamps.current.clear();
     };
   }, [settings.bubbleDuration, settings.eventHistoryLimit]);
 
@@ -451,7 +510,12 @@ const toolColorMap: Record<string, string> = {
   Grep: "blue",
   Glob: "blue",
   WebFetch: "blue",
+  WebSearch: "blue",
+  Notebook: "mint",
+  Agent: "steel",
+  Skill: "honey",
   Task: "steel",
+  MCP: "purple",
   Unknown: "steel"
 };
 
@@ -463,7 +527,12 @@ const toolIconMap: Record<string, string> = {
   Grep: "G",
   Glob: "G",
   WebFetch: "W",
+  WebSearch: "S",
+  Notebook: "N",
+  Agent: "A",
+  Skill: "K",
   Task: "T",
+  MCP: "M",
   Unknown: "?"
 };
 
@@ -520,6 +589,7 @@ function StateProp({ state }: { state: PetState }) {
   if (state === "tool_edit") return <Code2 className="state-prop edit-prop" size={30} />;
   if (state === "tool_read") return <FileText className="state-prop read-prop" size={30} />;
   if (state === "tool_search") return <Search className="state-prop search-prop" size={30} />;
+  if (state === "tool_mcp") return <PlugZap className="state-prop mcp-prop" size={30} />;
   if (state === "waiting_permission") return <Bell className="state-prop bell-prop" size={30} />;
   if (state === "done") return <Check className="state-prop check-prop" size={30} />;
   if (state === "error") return <X className="state-prop error-prop" size={30} />;
@@ -612,20 +682,8 @@ function SettingsApp() {
 
       <section className="content-grid">
         <Panel id="connect" title="Claude Code 连接" icon={<PlugZap size={18} />} wide>
-          <div className="connect-layout">
-            <div className="steps">
-              <Step number="1" title="保持 Clawd Companion 运行" text={`本地服务监听 ${connection.port}，Claude Code hooks 会把事件 POST 到这里。`} />
-              <Step number="2" title="把 hooks 写入 Claude Code 设置" text={`推荐位置：${hookConfigPath}。把右侧 JSON 合并到 settings.json 的 hooks 字段。`} />
-              <Step number="3" title="重新打开一个 Claude Code 会话" text="发送一条消息或运行工具后，下面的最近事件和状态映射会立刻亮起来。" />
-            </div>
-            <div className="code-card">
-              <div className="code-card-head">
-                <span>hooks 配置片段</span>
-                <button onClick={() => copy(hookSnippet, "hooks")}><Clipboard size={15} />{copied === "hooks" ? "已复制" : "复制"}</button>
-              </div>
-              <pre>{hookSnippet}</pre>
-            </div>
-          </div>
+          <HooksManager />
+          <div className="panel-divider" />
           <div className="connection-detail-grid">
             <ConnectionDetail label="状态" value={connection.connected ? "已连接" : connection.serverListening ? "等待 Claude 会话" : "本地服务未监听"} />
             <ConnectionDetail label="客户端" value={connection.activeClientLabel ?? "未知客户端"} />
@@ -724,6 +782,77 @@ function SettingsApp() {
 
 function Panel({ id, title, icon, wide, children }: { id?: string; title: string; icon: React.ReactNode; wide?: boolean; children: React.ReactNode }) {
   return <section id={id} className={`panel ${wide ? "wide" : ""}`}><header>{icon}<h2>{title}</h2></header>{children}</section>;
+}
+
+function HooksManager() {
+  const [status, setStatus] = useState<{ installed: boolean; configExists: boolean; hookCount: number; requiredCount: number; missingEvents: string[]; commandMatches: boolean } | null>(null);
+  const [action, setAction] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    window.companion.checkHooks().then(setStatus);
+  }, []);
+
+  async function handleInstall() {
+    setAction("installing");
+    const res = await window.companion.installHooks();
+    setResult(res.success ? "安装成功！重启 Claude Code 会话后生效。" : `安装失败: ${res.error}`);
+    setStatus(await window.companion.checkHooks());
+    setAction(null);
+  }
+
+  async function handleRepair() {
+    setAction("repairing");
+    const res = await window.companion.repairHooks();
+    setResult(res.success ? `修复完成，修复了 ${res.fixed.length} 项配置。` : `修复失败: ${res.error}`);
+    setStatus(await window.companion.checkHooks());
+    setAction(null);
+  }
+
+  async function handleRemove() {
+    setAction("removing");
+    const res = await window.companion.removeHooks();
+    setResult(res.success ? "已移除所有 Clawd hooks。" : `移除失败: ${res.error}`);
+    setStatus(await window.companion.checkHooks());
+    setAction(null);
+  }
+
+  return (
+    <div className="hooks-manager">
+      <StatusCard
+        icon={<Wrench size={18} />}
+        label="Hooks 状态"
+        value={status?.installed ? "已安装" : status?.configExists ? "部分安装" : "未安装"}
+        tone={status?.installed ? "good" : status?.configExists ? "wait" : "bad"}
+      />
+
+      <div className="hooks-detail">
+        <span>已配置 {status?.hookCount ?? 0} / {status?.requiredCount ?? 6} 个事件</span>
+        {status?.missingEvents && status.missingEvents.length > 0 && (
+          <span className="hooks-missing">缺少: {status.missingEvents.join(", ")}</span>
+        )}
+        {status && !status.commandMatches && status.configExists && (
+          <span className="hooks-mismatch">命令路径不匹配，建议修复</span>
+        )}
+      </div>
+
+      <div className="hooks-actions">
+        <button onClick={handleInstall} disabled={!!action}>
+          {action === "installing" ? "安装中..." : "一键安装"}
+        </button>
+        <button onClick={handleRepair} disabled={!!action}>
+          {action === "repairing" ? "修复中..." : "修复配置"}
+        </button>
+        <button className="danger" onClick={handleRemove} disabled={!!action}>
+          {action === "removing" ? "移除中..." : "移除 Hooks"}
+        </button>
+      </div>
+
+      {result && <p className="hooks-result">{result}</p>}
+
+      <p className="note">安装 hooks 后，Claude Code 会自动将事件发送到 Clawd Companion。备份文件保存在 ~/.claude/settings.clawd-backup.json</p>
+    </div>
+  );
 }
 
 function StatusCard({ icon, label, value, meta, tone }: { icon: React.ReactNode; label: string; value: string; meta?: string; tone: "good" | "bad" | "wait" | "neutral" }) {

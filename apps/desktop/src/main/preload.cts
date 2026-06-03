@@ -1,11 +1,24 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings } from "../shared/events.js";
 
+interface HooksStatus {
+  installed: boolean;
+  configExists: boolean;
+  hookCount: number;
+  requiredCount: number;
+  missingEvents: string[];
+  commandMatches: boolean;
+}
+
 contextBridge.exposeInMainWorld("companion", {
   getSettings: () => ipcRenderer.invoke("settings:get") as Promise<CompanionSettings>,
   saveSettings: (settings: Partial<CompanionSettings>) => ipcRenderer.invoke("settings:save", settings) as Promise<CompanionSettings>,
   getConnectionStatus: () => ipcRenderer.invoke("connection:get") as Promise<CompanionConnectionStatus>,
   sendTestEvent: (event: CompanionEvent) => ipcRenderer.invoke("event:test", event) as Promise<void>,
+  checkHooks: () => ipcRenderer.invoke("hooks:check") as Promise<HooksStatus>,
+  installHooks: () => ipcRenderer.invoke("hooks:install") as Promise<{ success: boolean; error?: string }>,
+  repairHooks: () => ipcRenderer.invoke("hooks:repair") as Promise<{ success: boolean; fixed: string[]; error?: string }>,
+  removeHooks: () => ipcRenderer.invoke("hooks:remove") as Promise<{ success: boolean; error?: string }>,
   openSettings: () => ipcRenderer.invoke("window:open-settings") as Promise<void>,
   minimizeSettings: () => ipcRenderer.invoke("window:minimize-settings") as Promise<void>,
   toggleMaximizeSettings: () => ipcRenderer.invoke("window:toggle-maximize-settings") as Promise<void>,
@@ -37,6 +50,10 @@ declare global {
       saveSettings: (settings: Partial<CompanionSettings>) => Promise<CompanionSettings>;
       getConnectionStatus: () => Promise<CompanionConnectionStatus>;
       sendTestEvent: (event: CompanionEvent) => Promise<void>;
+      checkHooks: () => Promise<HooksStatus>;
+      installHooks: () => Promise<{ success: boolean; error?: string }>;
+      repairHooks: () => Promise<{ success: boolean; fixed: string[]; error?: string }>;
+      removeHooks: () => Promise<{ success: boolean; error?: string }>;
       openSettings: () => Promise<void>;
       minimizeSettings: () => Promise<void>;
       toggleMaximizeSettings: () => Promise<void>;

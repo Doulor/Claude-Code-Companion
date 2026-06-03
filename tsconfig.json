@@ -16,5 +16,5 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["apps/desktop/src/renderer", "apps/desktop/src/shared"]
+  "include": ["apps/desktop/src/renderer", "apps/desktop/src/shared", "apps/desktop/src/main/preload.cts"]
 }
