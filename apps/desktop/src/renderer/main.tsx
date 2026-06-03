@@ -289,36 +289,49 @@ function PetApp() {
   const dragging = useRef<string | null>(null);
   const dragStart = useRef<{ mx: number; my: number; ox: number; oy: number }>({ mx: 0, my: 0, ox: 0, oy: 0 });
   const offRef = useRef(settings.positionOffsets ?? {});
-  const [idleBubbleActive, setIdleBubbleActive] = useState(false);
+  const [idleBubbleSprite, setIdleBubbleSprite] = useState<string | null>(null);
   const idleTimers = useRef<number[]>([]);
 
-  // 随机自动触发 idle_bubble + 响应测试按钮
+  // 响应测试按钮
   useEffect(() => {
     const off = window.companion.onTriggerIdleBubble(() => {
-      setIdleBubbleActive(true);
-      setTimeout(() => setIdleBubbleActive(false), 2500);
+      setIdleBubbleSprite("idle");
+      setTimeout(() => setIdleBubbleSprite(null), 2500);
     });
     return () => off();
   }, []);
 
+  // 随机待机动画：idle_bubble / permission_prompt 二选一，15~40s 间隔，连播 2~3 轮
   useEffect(() => {
     if (petState !== "idle" || editMode) {
-      setIdleBubbleActive(false);
+      setIdleBubbleSprite(null);
       idleTimers.current.forEach(clearTimeout);
       idleTimers.current = [];
       return;
     }
-    function scheduleNext() {
-      const delay = 20_000 + Math.random() * 40_000;
-      const t1 = window.setTimeout(() => {
-        setIdleBubbleActive(true);
-        const t2 = window.setTimeout(() => {
-          setIdleBubbleActive(false);
-          scheduleNext();
+    const pool = ["idle", "waiting_permission"];
+    function playBatch() {
+      const sprite = pool[Math.floor(Math.random() * pool.length)];
+      const repeats = 2 + Math.floor(Math.random() * 2); // 2 or 3
+      let count = 0;
+      function show() {
+        setIdleBubbleSprite(sprite);
+        const t = window.setTimeout(() => {
+          setIdleBubbleSprite(null);
+          count++;
+          if (count < repeats) {
+            idleTimers.current = [window.setTimeout(show, 1500)];
+          } else {
+            scheduleNext();
+          }
         }, 2500);
-        idleTimers.current = [t2];
-      }, delay);
-      idleTimers.current = [t1];
+        idleTimers.current = [t];
+      }
+      show();
+    }
+    function scheduleNext() {
+      const delay = 15_000 + Math.random() * 25_000;
+      idleTimers.current = [window.setTimeout(playBatch, delay)];
     }
     scheduleNext();
     return () => { idleTimers.current.forEach(clearTimeout); idleTimers.current = []; };
@@ -492,7 +505,7 @@ function PetApp() {
               </div>
             ) : null}
             <div className={`clawd clawd-${previewState}`} style={{ transform: `translate(${offsets.clawd?.x ?? 0}px, ${offsets.clawd?.y ?? 0}px) scale(${settings.clawdScale})`, opacity: settings.clawdOpacity }}>
-              <ClawdSprite state={previewState} idleBubble={idleBubbleActive} />
+              <ClawdSprite state={previewState} idleBubble={idleBubbleSprite} />
               {settings.showStatusProp && previewState !== "idle" ? <StateProp state={previewState} /> : null}
             </div>
             {settings.showBubbles ? (
@@ -577,7 +590,7 @@ function PetApp() {
           </div>
         ) : null}
         <div className={`clawd clawd-${petState}`} style={{ transform: `translate(${offsets.clawd?.x ?? 0}px, ${offsets.clawd?.y ?? 0}px) scale(${settings.clawdScale})`, opacity: settings.clawdOpacity }}>
-          <ClawdSprite state={petState} idleBubble={idleBubbleActive} />
+          <ClawdSprite state={petState} idleBubble={idleBubbleSprite} />
           {settings.showStatusProp && petState !== "idle" ? <StateProp state={petState} /> : null}
         </div>
         {settings.showBubbles && toolStreams.length > 0 ? (
@@ -730,34 +743,46 @@ function ToolStreams({ streams, offset }: { streams: ToolStream[]; offset?: { x:
   );
 }
 
-function Clawd({ state, settings, forceIdleBubble }: { state: PetState; settings: CompanionSettings; forceIdleBubble?: boolean }) {
-  const [showIdleBubble, setShowIdleBubble] = useState(false);
+function Clawd({ state, settings, forceIdleBubble }: { state: PetState; settings: CompanionSettings; forceIdleBubble?: string | null }) {
+  const [idleSprite, setIdleSprite] = useState<string | null>(null);
   const idleTimers = useRef<number[]>([]);
 
   useEffect(() => {
     if (state !== "idle") {
-      setShowIdleBubble(false);
+      setIdleSprite(null);
       idleTimers.current.forEach(clearTimeout);
       idleTimers.current = [];
       return;
     }
-    function scheduleNext() {
-      const delay = 20_000 + Math.random() * 40_000;
-      const t1 = window.setTimeout(() => {
-        setShowIdleBubble(true);
-        const t2 = window.setTimeout(() => {
-          setShowIdleBubble(false);
-          scheduleNext();
+    const pool = ["idle", "waiting_permission"];
+    function playBatch() {
+      const sprite = pool[Math.floor(Math.random() * pool.length)];
+      const repeats = 2 + Math.floor(Math.random() * 2);
+      let count = 0;
+      function show() {
+        setIdleSprite(sprite);
+        const t = window.setTimeout(() => {
+          setIdleSprite(null);
+          count++;
+          if (count < repeats) {
+            idleTimers.current = [window.setTimeout(show, 1500)];
+          } else {
+            scheduleNext();
+          }
         }, 2500);
-        idleTimers.current = [t2];
-      }, delay);
-      idleTimers.current = [t1];
+        idleTimers.current = [t];
+      }
+      show();
+    }
+    function scheduleNext() {
+      const delay = 15_000 + Math.random() * 25_000;
+      idleTimers.current = [window.setTimeout(playBatch, delay)];
     }
     scheduleNext();
     return () => { idleTimers.current.forEach(clearTimeout); idleTimers.current = []; };
   }, [state]);
 
-  const effectiveBubble = forceIdleBubble || showIdleBubble;
+  const effectiveBubble = forceIdleBubble ?? idleSprite;
 
   return (
     <section className={`clawd clawd-${state}`} style={{ transform: `scale(${settings.clawdScale})`, opacity: settings.clawdOpacity }} aria-label={`Clawd ${stateCopy[state].label}`}>
@@ -767,12 +792,13 @@ function Clawd({ state, settings, forceIdleBubble }: { state: PetState; settings
   );
 }
 
-function ClawdSprite({ state, idleBubble }: { state: PetState; idleBubble?: boolean }) {
+function ClawdSprite({ state, idleBubble }: { state: PetState; idleBubble?: string | null }) {
   if (idleBubble) {
+    const spriteState = idleBubble;
     return (
       <>
         <div className="clawd-glow" />
-        <span className="clawd-sprite clawd-sprite-idle clawd-gif-idle_bubble" aria-hidden="true" />
+        <span className={`clawd-sprite clawd-sprite-${spriteState} clawd-gif-${clawdGifName[idleBubble as PetState] ?? idleBubble}`} aria-hidden="true" />
         <div className="shadow" />
       </>
     );
@@ -817,7 +843,7 @@ function SettingsApp() {
     downloading: false
   });
   const [checkingUpdate, setCheckingUpdate] = useState(false);
-  const [previewIdleBubble, setPreviewIdleBubble] = useState(false);
+  const [previewIdleBubble, setPreviewIdleBubble] = useState<string | null>(null);
   const hookCommand = "node D:/build/GitLocal/Clawd-Companion/dist/hook-forwarder/index.js";
   const hookConfigPath = "C:/Users/Doulor/.claude/settings.json";
   const hookSnippet = useMemo(() => buildHookSnippet(hookCommand), [hookCommand]);
@@ -827,8 +853,8 @@ function SettingsApp() {
     window.companion.getUpdateStatus().then(setUpdateStatus);
     const offUpdate = window.companion.onUpdateStatus(setUpdateStatus);
     const offIdle = window.companion.onTriggerIdleBubble(() => {
-      setPreviewIdleBubble(true);
-      setTimeout(() => setPreviewIdleBubble(false), 2500);
+      setPreviewIdleBubble("idle");
+      setTimeout(() => setPreviewIdleBubble(null), 2500);
     });
     return () => { offUpdate(); offIdle(); };
   }, []);
@@ -916,7 +942,7 @@ function SettingsApp() {
             <code>{shortSession(connection.activeSessionId)}</code>
           </div>
         </div>
-        <div className="mini-stage"><div className="mini-pet"><Clawd key={previewIdleBubble ? "bubble" : "idle"} state={petState} settings={settings} forceIdleBubble={previewIdleBubble} /></div></div>
+        <div className="mini-stage"><div className="mini-pet"><Clawd key={previewIdleBubble ?? "idle"} state={petState} settings={settings} forceIdleBubble={previewIdleBubble} /></div></div>
       </section>
 
       <section className="status-strip">
