@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings } from "../shared/events.js";
+import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings, PermissionRequest, PermissionResponse, UpdateStatus } from "../shared/events.js";
 
 interface HooksStatus {
   installed: boolean;
@@ -40,7 +40,34 @@ contextBridge.exposeInMainWorld("companion", {
   },
   setPetInteractive: (interactive: boolean) => ipcRenderer.invoke("window:pet-interactive", interactive) as Promise<void>,
   dragPetTo: (x: number, y: number) => ipcRenderer.invoke("window:drag-pet", { x, y }) as Promise<void>,
-  movePetBy: (dx: number, dy: number) => ipcRenderer.invoke("window:move-pet-by", { dx, dy }) as Promise<void>
+  movePetBy: (dx: number, dy: number) => ipcRenderer.invoke("window:move-pet-by", { dx, dy }) as Promise<void>,
+  onPermissionRequest: (callback: (request: PermissionRequest) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, request: PermissionRequest) => callback(request);
+    ipcRenderer.on("companion:permission-request", handler);
+    return () => ipcRenderer.off("companion:permission-request", handler);
+  },
+  onPermissionResolved: (callback: (result: { id: string; status: string }) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, result: { id: string; status: string }) => callback(result);
+    ipcRenderer.on("companion:permission-resolved", handler);
+    return () => ipcRenderer.off("companion:permission-resolved", handler);
+  },
+  respondPermission: (response: PermissionResponse) =>
+    ipcRenderer.invoke("permission:respond", response) as Promise<{ success: boolean }>,
+  checkForUpdates: () => ipcRenderer.invoke("update:check") as Promise<{ ok: boolean; error?: string }>,
+  installUpdate: () => ipcRenderer.invoke("update:install"),
+  getUpdateStatus: () => ipcRenderer.invoke("update:get-status") as Promise<UpdateStatus>,
+  getAppVersion: () => ipcRenderer.invoke("app:get-version") as Promise<string>,
+  triggerIdleBubble: () => ipcRenderer.invoke("test:idle-bubble"),
+  onTriggerIdleBubble: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on("companion:test-idle-bubble", handler);
+    return () => ipcRenderer.off("companion:test-idle-bubble", handler);
+  },
+  onUpdateStatus: (callback: (status: UpdateStatus) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, status: UpdateStatus) => callback(status);
+    ipcRenderer.on("companion:update-status", handler);
+    return () => ipcRenderer.off("companion:update-status", handler);
+  }
 });
 
 declare global {
@@ -64,6 +91,16 @@ declare global {
       setPetInteractive: (interactive: boolean) => Promise<void>;
       dragPetTo: (x: number, y: number) => Promise<void>;
       movePetBy: (dx: number, dy: number) => Promise<void>;
+      onPermissionRequest: (callback: (request: PermissionRequest) => void) => () => void;
+      onPermissionResolved: (callback: (result: { id: string; status: string }) => void) => () => void;
+      respondPermission: (response: PermissionResponse) => Promise<{ success: boolean }>;
+      checkForUpdates: () => Promise<{ ok: boolean; error?: string }>;
+      installUpdate: () => Promise<void>;
+      getUpdateStatus: () => Promise<UpdateStatus>;
+      getAppVersion: () => Promise<string>;
+      triggerIdleBubble: () => Promise<void>;
+      onTriggerIdleBubble: (callback: () => void) => () => void;
+      onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
     };
   }
 }

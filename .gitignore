@@ -11,6 +11,10 @@ apps/desktop/src/renderer/clawd-anims/
 # User data
 *.log
 
+# Personal scripts (not part of the project)
+*.bat
+*.vbs
+
 # OS files
 Thumbs.db
 Desktop.ini

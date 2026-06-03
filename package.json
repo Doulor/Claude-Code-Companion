@@ -1,6 +1,6 @@
 {
-  "name": "claude-code-companion",
-  "version": "1.2.1",
+  "name": "clawd-companion",
+  "version": "1.3.0",
   "private": true,
   "description": "Clawd Companion - Claude Code 桌宠伴侣，实时显示工具调用和会话状态。",
   "author": "Doulor",
@@ -22,6 +22,11 @@
     "directories": {
       "output": "release"
     },
+    "publish": {
+      "provider": "github",
+      "owner": "Doulor",
+      "repo": "Clawd-Companion"
+    },
     "files": [
       "dist/**/*",
       "build/**/*"
@@ -40,6 +45,7 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
+    "electron-updater": "^6.8.3",
     "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",

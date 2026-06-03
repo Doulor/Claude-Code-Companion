@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node D:/build/GitLocal/claude-code-companion/dist/hook-forwarder/index.js"
+            "command": "node D:/build/GitLocal/Clawd-Companion/dist/hook-forwarder/index.js"
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node D:/build/GitLocal/claude-code-companion/dist/hook-forwarder/index.js"
+            "command": "node D:/build/GitLocal/Clawd-Companion/dist/hook-forwarder/index.js"
           }
         ]
       }
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node D:/build/GitLocal/claude-code-companion/dist/hook-forwarder/index.js"
+            "command": "node D:/build/GitLocal/Clawd-Companion/dist/hook-forwarder/index.js"
           }
         ]
       }
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node D:/build/GitLocal/claude-code-companion/dist/hook-forwarder/index.js"
+            "command": "node D:/build/GitLocal/Clawd-Companion/dist/hook-forwarder/index.js"
           }
         ]
       }
@@ -50,7 +50,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node D:/build/GitLocal/claude-code-companion/dist/hook-forwarder/index.js"
+            "command": "node D:/build/GitLocal/Clawd-Companion/dist/hook-forwarder/index.js"
           }
         ]
       }
@@ -61,7 +61,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node D:/build/GitLocal/claude-code-companion/dist/hook-forwarder/index.js"
+            "command": "node D:/build/GitLocal/Clawd-Companion/dist/hook-forwarder/index.js"
           }
         ]
       }

@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings } from "../shared/events";
+import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings, PermissionRequest, PermissionResponse, UpdateStatus } from "../shared/events";
 
 interface HooksStatus {
   installed: boolean;
@@ -32,6 +32,16 @@ declare global {
       setPetInteractive: (interactive: boolean) => Promise<void>;
       dragPetTo: (x: number, y: number) => Promise<void>;
       movePetBy: (dx: number, dy: number) => Promise<void>;
+      onPermissionRequest: (callback: (request: PermissionRequest) => void) => () => void;
+      onPermissionResolved: (callback: (result: { id: string; status: string }) => void) => () => void;
+      respondPermission: (response: PermissionResponse) => Promise<{ success: boolean }>;
+      checkForUpdates: () => Promise<{ ok: boolean; error?: string }>;
+      installUpdate: () => Promise<void>;
+      getUpdateStatus: () => Promise<UpdateStatus>;
+      getAppVersion: () => Promise<string>;
+      triggerIdleBubble: () => Promise<void>;
+      onTriggerIdleBubble: (callback: () => void) => () => void;
+      onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
     };
   }
 }

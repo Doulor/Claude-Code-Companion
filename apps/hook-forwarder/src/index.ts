@@ -222,10 +222,136 @@ function postEvent(event: CompanionEvent): Promise<void> {
   });
 }
 
+function isPermissionEvent(payload: HookPayload): boolean {
+  const hook = hookName(payload);
+  if (hook !== "PreToolUse") return false;
+  // 权限已跳过时不介入：bypassPermissions / dontAsk / auto 模式下 Claude Code 不需要外部确认
+  const permMode = text(payload.permission_mode) ?? text(payload.permissionMode) ?? "";
+  if (permMode === "bypassPermissions" || permMode === "dontAsk" || permMode === "auto") return false;
+  return true;
+}
+
+interface PermissionPollResult {
+  status: "approved" | "denied" | "expired" | "error";
+  decision?: "allow" | "deny";
+  reason?: string;
+}
+
+function requestPermission(payload: HookPayload): Promise<PermissionPollResult> {
+  const tool = toolName(payload);
+  const detail = detailForTool(payload, tool);
+  const sessionId = text(payload.session_id) ?? text(payload.sessionId);
+  const permissionTimeout = Number(process.env.CLAWD_PERMISSION_TIMEOUT ?? "120000");
+
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({
+      toolName: tool,
+      toolDetail: detail,
+      sessionId,
+      rawPayload: payload
+    });
+
+    const req = request({
+      host: "127.0.0.1",
+      port,
+      path: "/permission",
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": Buffer.byteLength(body),
+        "authorization": `Bearer ${token}`
+      },
+      timeout: 5000
+    }, (res: IncomingMessage) => {
+      let data = "";
+      res.on("data", chunk => { data += chunk; });
+      res.on("end", () => {
+        try {
+          const result = JSON.parse(data);
+          const id = result.id;
+          if (!id) {
+            resolve({ status: "error", reason: "No permission ID" });
+            return;
+          }
+          longPollPermission(id, permissionTimeout).then(resolve).catch(reject);
+        } catch {
+          resolve({ status: "error", reason: "Invalid response" });
+        }
+      });
+    });
+
+    req.on("error", () => resolve({ status: "error", reason: "Server unavailable" }));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve({ status: "error", reason: "Request timeout" });
+    });
+    req.write(body);
+    req.end();
+  });
+}
+
+function longPollPermission(id: string, timeout: number): Promise<PermissionPollResult> {
+  return new Promise((resolve, reject) => {
+    const req = request({
+      host: "127.0.0.1",
+      port,
+      path: `/permission/${id}`,
+      method: "GET",
+      headers: {
+        "authorization": `Bearer ${token}`
+      },
+      timeout
+    }, (res: IncomingMessage) => {
+      let data = "";
+      res.on("data", chunk => { data += chunk; });
+      res.on("end", () => {
+        try {
+          const result = JSON.parse(data);
+          resolve(result as PermissionPollResult);
+        } catch {
+          resolve({ status: "error", reason: "Invalid poll response" });
+        }
+      });
+    });
+
+    req.on("error", () => resolve({ status: "error", reason: "Poll error" }));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve({ status: "expired", reason: "Poll timeout" });
+    });
+    req.end();
+  });
+}
+
+function writeStdoutDecision(result: PermissionPollResult, payload: HookPayload): void {
+  if (result.decision === "allow" || result.decision === "deny") {
+    const output = {
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: result.decision,
+        permissionDecisionReason: result.reason ?? (result.decision === "allow" ? "Approved via Clawd Companion" : "Denied via Clawd Companion")
+      },
+      continue: true
+    };
+    process.stdout.write(JSON.stringify(output));
+  }
+}
+
 async function main() {
   const raw = readStdin();
   if (!raw.trim()) return;
   const payload = JSON.parse(raw) as HookPayload;
+
+  if (isPermissionEvent(payload)) {
+    try {
+      const result = await requestPermission(payload);
+      writeStdoutDecision(result, payload);
+    } catch {
+      // 出错时不写 stdout，Claude Code 会使用原生权限流程
+    }
+    return;
+  }
+
   await postEvent(normalize(payload));
 }
 

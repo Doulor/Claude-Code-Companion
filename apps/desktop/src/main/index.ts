@@ -1,11 +1,13 @@
 import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, Notification, screen } from "electron";
+import electronUpdater from "electron-updater";
+const { autoUpdater } = electronUpdater;
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { WebSocketServer } from "ws";
 import { appendFileSync, readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { homedir } from "node:os";
-import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings } from "../shared/events.js";
+import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings, PermissionPollResult, PermissionResponse, UpdateStatus } from "../shared/events.js";
 import { defaultSettings } from "../shared/events.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -33,6 +35,30 @@ let activeSessionId: string | undefined;
 let activeClientType: CompanionEvent["clientType"] | undefined;
 let activeClientLabel: string | undefined;
 
+let updateStatus: UpdateStatus = {
+  checking: false,
+  available: false,
+  upToDate: false,
+  downloaded: false,
+  downloading: false
+};
+
+interface PendingPermission {
+  id: string;
+  toolName: string;
+  toolDetail?: string;
+  sessionId?: string;
+  timestamp: number;
+  rawPayload: Record<string, unknown>;
+  status: "pending" | "approved" | "denied" | "expired";
+  decision?: "allow" | "deny";
+  reason?: string;
+  resolve: (result: PermissionPollResult) => void;
+  timeout: ReturnType<typeof setTimeout>;
+}
+
+const pendingPermissions = new Map<string, PendingPermission>();
+
 function ensureDataDir() {
   if (!existsSync(appDataDir)) mkdirSync(appDataDir, { recursive: true });
 }
@@ -54,6 +80,7 @@ function loadSettings(): CompanionSettings {
     ...stored,
     feedbackModes: { ...defaultSettings.feedbackModes, ...(stored.feedbackModes ?? {}) },
     toolFeedbackModes: { ...defaultSettings.toolFeedbackModes, ...(stored.toolFeedbackModes ?? {}) },
+    positionOffsets: { ...defaultSettings.positionOffsets, ...(stored.positionOffsets ?? {}) },
     zoneSizes: stored.zoneSizes ?? defaultSettings.zoneSizes
   };
 }
@@ -288,6 +315,47 @@ function broadcastConnectionStatus() {
   wsServer?.clients.forEach(client => client.send(JSON.stringify({ type: "connection", payload: status })));
 }
 
+function broadcastUpdateStatus() {
+  petWindow?.webContents.send("companion:update-status", updateStatus);
+  settingsWindow?.webContents.send("companion:update-status", updateStatus);
+}
+
+function setupAutoUpdater() {
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on("checking-for-update", () => {
+    updateStatus = { ...updateStatus, checking: true, upToDate: false, error: undefined };
+    broadcastUpdateStatus();
+  });
+
+  autoUpdater.on("update-available", info => {
+    updateStatus = { ...updateStatus, checking: false, available: true, version: info.version };
+    broadcastUpdateStatus();
+  });
+
+  autoUpdater.on("update-not-available", () => {
+    updateStatus = { checking: false, available: false, upToDate: true, downloaded: false, downloading: false, version: undefined };
+    broadcastUpdateStatus();
+  });
+
+  autoUpdater.on("download-progress", progress => {
+    updateStatus = { ...updateStatus, downloading: true, progress: progress.percent };
+    broadcastUpdateStatus();
+  });
+
+  autoUpdater.on("update-downloaded", info => {
+    updateStatus = { checking: false, available: true, upToDate: false, downloading: false, downloaded: true, version: info.version, progress: 100 };
+    broadcastUpdateStatus();
+  });
+
+  autoUpdater.on("error", error => {
+    updateStatus = { ...updateStatus, checking: false, downloading: false, error: error.message };
+    broadcastUpdateStatus();
+    logRuntime(`autoUpdater error: ${error.message}`);
+  });
+}
+
 function isCompanionEvent(value: unknown): value is CompanionEvent {
   if (!value || typeof value !== "object") return false;
   const event = value as Record<string, unknown>;
@@ -301,6 +369,107 @@ function startEventServer() {
   eventServer = createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/health") {
       writeJson(res, 200, { ok: true, ...getConnectionStatus() });
+      return;
+    }
+
+    // 权限请求端点
+    if (req.url?.startsWith("/permission")) {
+      const token = req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? "";
+      if (token !== settings.token) {
+        writeJson(res, 401, { ok: false, error: "unauthorized" });
+        return;
+      }
+
+      // POST /permission - 创建权限请求
+      if (req.method === "POST" && req.url === "/permission") {
+        try {
+          const body = await parseJsonBody(req);
+          const { randomUUID } = await import("node:crypto");
+          const id = randomUUID();
+
+          let resolve!: (result: PermissionPollResult) => void;
+          const promise = new Promise<PermissionPollResult>(r => { resolve = r; });
+
+          const pending: PendingPermission = {
+            id,
+            toolName: String((body as any).toolName ?? "Unknown"),
+            toolDetail: (body as any).toolDetail ? String((body as any).toolDetail) : undefined,
+            sessionId: (body as any).sessionId ? String((body as any).sessionId) : undefined,
+            timestamp: Date.now(),
+            rawPayload: (body as any).rawPayload ?? {},
+            status: "pending",
+            resolve,
+            timeout: setTimeout(() => {
+              const p = pendingPermissions.get(id);
+              if (p && p.status === "pending") {
+                p.status = "expired";
+                p.resolve({ status: "expired", reason: "Timeout" });
+                pendingPermissions.delete(id);
+                petWindow?.webContents.send("companion:permission-resolved", { id, status: "expired" });
+                settingsWindow?.webContents.send("companion:permission-resolved", { id, status: "expired" });
+              }
+            }, 120_000)
+          };
+
+          pendingPermissions.set(id, pending);
+
+          // 广播给渲染进程
+          petWindow?.webContents.send("companion:permission-request", {
+            id,
+            toolName: pending.toolName,
+            toolDetail: pending.toolDetail,
+            sessionId: pending.sessionId,
+            timestamp: pending.timestamp,
+            rawPayload: pending.rawPayload
+          });
+          settingsWindow?.webContents.send("companion:permission-request", {
+            id,
+            toolName: pending.toolName,
+            toolDetail: pending.toolDetail,
+            sessionId: pending.sessionId,
+            timestamp: pending.timestamp,
+            rawPayload: pending.rawPayload
+          });
+
+          writeJson(res, 200, { id, status: "pending" });
+        } catch {
+          writeJson(res, 400, { ok: false, error: "bad_json" });
+        }
+        return;
+      }
+
+      // GET /permission/:id - 长轮询等待决策
+      if (req.method === "GET" && req.url.startsWith("/permission/")) {
+        const id = req.url.slice("/permission/".length);
+        const pending = pendingPermissions.get(id);
+
+        if (!pending) {
+          writeJson(res, 404, { ok: false, error: "not_found" });
+          return;
+        }
+
+        if (pending.status !== "pending") {
+          writeJson(res, 200, { status: pending.status, decision: pending.decision, reason: pending.reason });
+          return;
+        }
+
+        // 长轮询：等待 resolve
+        try {
+          const result = await Promise.race([
+            new Promise<PermissionPollResult>(r => {
+              const origResolve = pending.resolve;
+              pending.resolve = (result) => { origResolve(result); r(result); };
+            }),
+            new Promise<PermissionPollResult>(r => setTimeout(() => r({ status: "expired", reason: "Poll timeout" }), 120_000))
+          ]);
+          writeJson(res, 200, result);
+        } catch {
+          writeJson(res, 500, { ok: false, error: "internal_error" });
+        }
+        return;
+      }
+
+      writeJson(res, 404, { ok: false, error: "not_found" });
       return;
     }
 
@@ -536,6 +705,33 @@ ipcMain.handle("hooks:check", () => checkHooks());
 ipcMain.handle("hooks:install", () => installHooks());
 ipcMain.handle("hooks:repair", () => repairHooks());
 ipcMain.handle("hooks:remove", () => removeHooks());
+ipcMain.handle("permission:respond", async (_, response: PermissionResponse) => {
+  const pending = pendingPermissions.get(response.id);
+  if (!pending || pending.status !== "pending") return { success: false };
+  clearTimeout(pending.timeout);
+  pending.status = response.decision === "allow" ? "approved" : "denied";
+  pending.decision = response.decision;
+  pending.reason = response.reason ?? (response.decision === "allow" ? "Approved via Clawd" : "Denied via Clawd");
+  pending.resolve({
+    status: pending.status,
+    decision: pending.decision,
+    reason: pending.reason
+  });
+  pendingPermissions.delete(response.id);
+  petWindow?.webContents.send("companion:permission-resolved", { id: response.id, status: pending.status });
+  settingsWindow?.webContents.send("companion:permission-resolved", { id: response.id, status: pending.status });
+  const { randomUUID } = await import("node:crypto");
+  emitEvent({
+    id: randomUUID(),
+    source: "claude-code",
+    event: "notification",
+    title: response.decision === "allow" ? "权限已授予" : "权限已拒绝",
+    message: `${pending.toolName}: ${response.decision === "allow" ? "已允许" : "已拒绝"}`,
+    detail: pending.toolDetail,
+    timestamp: Date.now()
+  });
+  return { success: true };
+});
 ipcMain.handle("window:open-settings", () => createSettingsWindow());
 ipcMain.handle("window:minimize-settings", () => settingsWindow?.minimize());
 ipcMain.handle("window:toggle-maximize-settings", () => {
@@ -566,6 +762,32 @@ ipcMain.handle("window:move-pet-by", (_, delta: { dx: number; dy: number }) => {
   }, 400);
 });
 
+ipcMain.handle("update:check", async () => {
+  if (!app.isPackaged) {
+    return { ok: false, error: "开发模式下无法检查更新，请打包安装后使用自动更新功能。" };
+  }
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    if (!result) {
+      return { ok: false, error: "未找到更新信息，请确认 GitHub Release 已发布。" };
+    }
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+ipcMain.handle("update:install", () => {
+  if (updateStatus.downloaded) {
+    autoUpdater.quitAndInstall();
+  }
+});
+ipcMain.handle("update:get-status", () => updateStatus);
+ipcMain.handle("app:get-version", () => app.getVersion());
+ipcMain.handle("test:idle-bubble", () => {
+  petWindow?.webContents.send("companion:test-idle-bubble");
+  settingsWindow?.webContents.send("companion:test-idle-bubble");
+});
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!gotSingleInstanceLock) {
@@ -582,6 +804,8 @@ if (!gotSingleInstanceLock) {
     if (settings.openSettingsOnStart) createSettingsWindow();
     makeTrayIcon();
     startEventServer();
+    setupAutoUpdater();
+    autoUpdater.checkForUpdates().catch(() => {});
   });
 
   app.on("window-all-closed", () => {
@@ -591,5 +815,10 @@ if (!gotSingleInstanceLock) {
   app.on("before-quit", () => {
     wsServer?.close();
     eventServer?.close();
+    pendingPermissions.forEach(p => {
+      clearTimeout(p.timeout);
+      p.resolve({ status: "expired", reason: "App quitting" });
+    });
+    pendingPermissions.clear();
   });
 }

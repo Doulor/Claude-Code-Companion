@@ -24,7 +24,7 @@ import {
   Wrench,
   X
 } from "lucide-react";
-import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings, FeedbackMode, PetState, PrivacyMode, ToolName } from "../shared/events";
+import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings, FeedbackMode, PetState, PrivacyMode, PermissionRequest, ToolName, UpdateStatus } from "../shared/events";
 import { defaultSettings, stateFromEvent } from "../shared/events";
 import clawdImage from "./clawd.png";
 import "./clawd-sprites/sprites.css";
@@ -75,22 +75,6 @@ function getFeedbackMode(event: CompanionEvent, settings: CompanionSettings): Fe
   return settings.feedbackModes?.[stateFromEvent(event)] ?? "card";
 }
 
-const toolFeedbackRows: Array<{ tool: ToolName; label: string }> = [
-  { tool: "Read", label: "读取文件" },
-  { tool: "Edit", label: "编辑文件" },
-  { tool: "Write", label: "写入文件" },
-  { tool: "Bash", label: "执行命令" },
-  { tool: "Grep", label: "搜索内容" },
-  { tool: "Glob", label: "搜索文件" },
-  { tool: "WebFetch", label: "抓取网页" },
-  { tool: "WebSearch", label: "网络搜索" },
-  { tool: "Notebook", label: "笔记本" },
-  { tool: "Agent", label: "子代理" },
-  { tool: "Skill", label: "技能" },
-  { tool: "Task", label: "子任务" },
-  { tool: "MCP", label: "MCP 工具" }
-];
-
 const feedbackRows: Array<{ state: PetState; label: string }> = [
   { state: "thinking", label: "思考 / 新消息" },
   { state: "tool_read", label: "读取文件" },
@@ -132,6 +116,7 @@ interface ToolStream {
   event: CompanionEvent;
   exiting: boolean;
   slot: number;
+  exitSlot?: number;
 }
 
 function useCompanion() {
@@ -147,6 +132,7 @@ function useCompanion() {
   const [currentEvent, setCurrentEvent] = useState<CompanionEvent | null>(null);
   const [petState, setPetState] = useState<PetState>("idle");
   const [toolStreams, setToolStreams] = useState<ToolStream[]>([]);
+  const [activePermissions, setActivePermissions] = useState<PermissionRequest[]>([]);
   const ribbonTimers = useRef<Map<string, number>>(new Map());
   const ribbonTimestamps = useRef<Map<string, number>>(new Map());
 
@@ -159,9 +145,16 @@ function useCompanion() {
   }
 
   function markExiting(eventId: string) {
-    setToolStreams(previous => previous.map(s =>
-      s.event.id === eventId ? { ...s, exiting: true } : s
-    ));
+    setToolStreams(previous => {
+      const target = previous.find(s => s.event.id === eventId);
+      if (!target) return previous;
+      const exitSlot = target.slot;
+      return previous.map(s => {
+        if (s.event.id === eventId) return { ...s, exiting: true, exitSlot };
+        if (!s.exiting && s.slot > exitSlot) return { ...s, slot: s.slot - 1 };
+        return s;
+      });
+    });
     scheduleStreamRemoval(eventId);
   }
 
@@ -251,10 +244,21 @@ function useCompanion() {
         setCurrentEvent(current => current?.id === event.id ? null : current);
       }, timeout);
     });
+    const offPermissionRequest = window.companion.onPermissionRequest(request => {
+      setActivePermissions(prev => [...prev, request]);
+      setPetState("waiting_permission");
+    });
+
+    const offPermissionResolved = window.companion.onPermissionResolved(({ id }) => {
+      setActivePermissions(prev => prev.filter(p => p.id !== id));
+    });
+
     return () => {
       offSettings();
       offConnection();
       offEvent();
+      offPermissionRequest();
+      offPermissionResolved();
       // 清理所有 ribbon 定时器
       ribbonTimers.current.forEach(id => window.clearTimeout(id));
       ribbonTimers.current.clear();
@@ -267,15 +271,34 @@ function useCompanion() {
     setSettings(saved);
   }
 
-  return { settings, updateSettings, connection, events, currentEvent, petState, toolStreams };
+  async function respondToPermission(id: string, decision: "allow" | "deny") {
+    await window.companion.respondPermission({
+      id,
+      decision,
+      reason: decision === "allow" ? "Approved via Clawd" : "Denied via Clawd"
+    });
+    setActivePermissions(prev => prev.filter(p => p.id !== id));
+  }
+
+  return { settings, updateSettings, connection, events, currentEvent, petState, toolStreams, activePermissions, respondToPermission };
 }
 
 function PetApp() {
-  const { settings, updateSettings, currentEvent, petState, toolStreams } = useCompanion();
+  const { settings, updateSettings, currentEvent, petState, toolStreams, activePermissions, respondToPermission } = useCompanion();
   const editMode = settings.editPosition;
   const dragging = useRef<string | null>(null);
   const dragStart = useRef<{ mx: number; my: number; ox: number; oy: number }>({ mx: 0, my: 0, ox: 0, oy: 0 });
   const offRef = useRef(settings.positionOffsets ?? {});
+  const [testIdleBubble, setTestIdleBubble] = useState(false);
+
+  useEffect(() => {
+    const off = window.companion.onTriggerIdleBubble(() => {
+      setTestIdleBubble(true);
+      setTimeout(() => setTestIdleBubble(false), 2500);
+    });
+    return () => off();
+  }, []);
+
   useEffect(() => {
     if (editMode) {
       void window.companion.setPetInteractive(false);
@@ -292,23 +315,33 @@ function PetApp() {
     }
     if (settings.clickThrough) {
       void window.companion.setPetInteractive(false);
-      return;
+      if (activePermissions.length === 0) return;
+      const handle = (e: MouseEvent) => {
+        if (dragging.current) return;
+        const target = e.target as HTMLElement;
+        void window.companion.setPetInteractive(!!target.closest('.perm-card'));
+      };
+      window.addEventListener('mousemove', handle);
+      return () => {
+        window.removeEventListener('mousemove', handle);
+        void window.companion.setPetInteractive(false);
+      };
     }
     void window.companion.setPetInteractive(false);
     const handle = (e: MouseEvent) => {
       if (dragging.current) return;
       const target = e.target as HTMLElement;
-      void window.companion.setPetInteractive(!!target.closest('.clawd, .bubble-wrapper, .tool-streams'));
+      void window.companion.setPetInteractive(!!target.closest('.clawd, .bubble-wrapper, .tool-streams, .permission-card'));
     };
     window.addEventListener('mousemove', handle);
     return () => {
       window.removeEventListener('mousemove', handle);
       void window.companion.setPetInteractive(false);
     };
-  }, [editMode, settings.clickThrough]);
+  }, [editMode, settings.clickThrough, activePermissions]);
 
   const offsetsRef = useRef(settings.positionOffsets ?? {});
-  const scaleRef = useRef({ clawd: settings.clawdScale, bubble: settings.thoughtScale, ribbon: settings.bubbleScale });
+  const scaleRef = useRef({ clawd: settings.clawdScale, bubble: settings.thoughtScale, ribbon: settings.bubbleScale, permission: settings.permissionScale });
 
   useEffect(() => {
     const move = (e: MouseEvent) => {
@@ -324,6 +357,8 @@ function PetApp() {
           updateSettings({ thoughtScale: ns, cardScale: ns });
         } else if (zoneKey === "ribbon") {
           updateSettings({ bubbleScale: Math.max(0.6, Math.min(2, ox + (e.clientX - mx) / 144)) });
+        } else if (zoneKey === "permission") {
+          updateSettings({ permissionScale: Math.max(0.4, Math.min(2, ox + (e.clientX - mx) / 240)) });
         } else if (zoneKey.startsWith("edge")) {
           const ws = ox + (e.clientX - mx + e.clientY - my) / 800;
           updateSettings({ viewScale: Math.max(0.7, Math.min(2.5, ws)) });
@@ -347,7 +382,7 @@ function PetApp() {
   }, []);
 
   useEffect(() => { offsetsRef.current = settings.positionOffsets ?? {}; }, [settings.positionOffsets]);
-  useEffect(() => { scaleRef.current = { clawd: settings.clawdScale, bubble: settings.thoughtScale, ribbon: settings.bubbleScale }; }, [settings.clawdScale, settings.thoughtScale, settings.bubbleScale]);
+  useEffect(() => { scaleRef.current = { clawd: settings.clawdScale, bubble: settings.thoughtScale, ribbon: settings.bubbleScale, permission: settings.permissionScale }; }, [settings.clawdScale, settings.thoughtScale, settings.bubbleScale, settings.permissionScale]);
 
   const editPreviewEvent = useMemo(
     () => makeEvent("tool_start", "manual", "编辑模式预览", "这是桌宠实际显示的卡片 / 气泡位置。", "Edit"),
@@ -355,6 +390,10 @@ function PetApp() {
   );
   const editPreviewStreams = useMemo(
     () => [{ event: makeEvent("tool_start", "manual", "工具指示器预览", "Edit 工具指示器位置预览。", "Edit"), exiting: false, slot: 0 }],
+    []
+  );
+  const editPreviewPermission = useMemo(
+    () => ({ id: "preview", toolName: "Bash" as ToolName, toolDetail: "预览权限卡片位置", timestamp: Date.now(), rawPayload: {} }),
     []
   );
 
@@ -406,6 +445,8 @@ function PetApp() {
     const by = bubbleMode === "thought" ? 84 : 10;
     const rw = Math.round(144 * settings.bubbleScale);
     const rh = Math.round(144 * settings.bubbleScale);
+    const pw = Math.round(240 * settings.permissionScale);
+    const ph = Math.round(140 * settings.permissionScale);
 
     return (
       <main className="pet-stage edit-mode"
@@ -426,11 +467,22 @@ function PetApp() {
               </div>
             ) : null}
             <div className={`clawd clawd-${previewState}`} style={{ transform: `translate(${offsets.clawd?.x ?? 0}px, ${offsets.clawd?.y ?? 0}px) scale(${settings.clawdScale})`, opacity: settings.clawdOpacity }}>
-              <ClawdSprite state={previewState} />
+              <ClawdSprite state={previewState} idleBubble={testIdleBubble} />
               {settings.showStatusProp && previewState !== "idle" ? <StateProp state={previewState} /> : null}
             </div>
             {settings.showBubbles ? (
               <ToolStreams streams={previewStreams} offset={offsets.ribbon} />
+            ) : null}
+            {settings.showBubbles ? (
+              <div className="permission-card-wrapper" style={{ transform: `translate(${offsets.permission?.x ?? 0}px, ${offsets.permission?.y ?? 0}px)` }}>
+                <PermissionCard
+                  permission={editPreviewPermission}
+                  queueCount={1}
+                  onAllow={() => {}}
+                  onDeny={() => {}}
+                  settings={settings}
+                />
+              </div>
             ) : null}
           </div>
           <div className="edit-zone edit-zone-clawd"
@@ -465,6 +517,17 @@ function PetApp() {
             <span className="edit-zone-label">工具条</span>
             <span className="zone-resize" onMouseDown={e => beginResize("ribbon", e)} />
           </div>
+          <div className="edit-zone edit-zone-permission"
+            style={{
+              left: 10,
+              top: 10,
+              transform: `translate(${offsets.permission?.x ?? 0}px, ${offsets.permission?.y ?? 0}px)`,
+              width: pw, height: ph
+            }}
+            onMouseDown={e => begin("permission", e)}>
+            <span className="edit-zone-label">权限卡片</span>
+            <span className="zone-resize" onMouseDown={e => beginResize("permission", e)} />
+          </div>
         </section>
       </main>
     );
@@ -473,13 +536,23 @@ function PetApp() {
   return (
     <main className={`pet-stage ${settings.clickThrough ? 'pet-clickthrough' : ''}`}>
       <section className="pet-anchor" style={{ transform: `translateX(-50%) scale(${settings.petScale}) translate(${viewOff.x}px, ${viewOff.y}px)`, opacity: settings.petOpacity }} onMouseDown={beginNormalDrag}>
-        {settings.showBubbles && currentEvent && getFeedbackMode(currentEvent, settings) !== "ribbon" ? (
+        {activePermissions.length > 0 ? (
+          <div className="permission-card-wrapper" style={{ transform: `translate(${offsets.permission?.x ?? 0}px, ${offsets.permission?.y ?? 0}px)` }}>
+            <PermissionCard
+              permission={activePermissions[0]}
+              queueCount={activePermissions.length}
+              onAllow={() => respondToPermission(activePermissions[0].id, "allow")}
+              onDeny={() => respondToPermission(activePermissions[0].id, "deny")}
+              settings={settings}
+            />
+          </div>
+        ) : settings.showBubbles && currentEvent && getFeedbackMode(currentEvent, settings) !== "ribbon" ? (
           <div className="bubble-wrapper" style={{ transform: `translate(${offsets.bubble?.x ?? 0}px, ${offsets.bubble?.y ?? 0}px)` }}>
             <Bubble event={currentEvent} state={stateFromEvent(currentEvent)} settings={settings} />
           </div>
         ) : null}
         <div className={`clawd clawd-${petState}`} style={{ transform: `translate(${offsets.clawd?.x ?? 0}px, ${offsets.clawd?.y ?? 0}px) scale(${settings.clawdScale})`, opacity: settings.clawdOpacity }}>
-          <ClawdSprite state={petState} />
+          <ClawdSprite state={petState} idleBubble={testIdleBubble} />
           {settings.showStatusProp && petState !== "idle" ? <StateProp state={petState} /> : null}
         </div>
         {settings.showBubbles && toolStreams.length > 0 ? (
@@ -527,6 +600,48 @@ function Bubble({ event, state, settings }: { event: CompanionEvent; state: PetS
   );
 }
 
+function PermissionCard({ permission, queueCount, onAllow, onDeny, settings }: {
+  permission: PermissionRequest;
+  queueCount: number;
+  onAllow: () => void;
+  onDeny: () => void;
+  settings: CompanionSettings;
+}) {
+  const color = toolColorMap[permission.toolName] ?? "steel";
+  const detail = permission.toolDetail ?? permission.toolName;
+
+  return (
+    <div className="permission-card-inner" style={{ transform: `scale(${settings.permissionScale})`, opacity: settings.permissionOpacity }}>
+      <section className={`perm-card`}>
+        <div className="perm-card-scanline" />
+        <div className="perm-card-topbar">
+          <span className="perm-card-dot" />
+          <span className="perm-card-label">ACCESS REQUEST</span>
+          <span className="perm-card-dot" />
+        </div>
+        <div className="perm-card-main">
+          <div className="perm-card-tool-line">
+            <span className="perm-card-prompt">&gt;</span>
+            <span className={`perm-card-toolname color-${color}`}>{permission.toolName}</span>
+          </div>
+          <code className="perm-card-detail">{detail}</code>
+        </div>
+        <div className="perm-card-actions">
+          <button className="perm-btn perm-btn-allow" onClick={onAllow}>
+            <span className="perm-btn-key">Y</span> 允许
+          </button>
+          <button className="perm-btn perm-btn-deny" onClick={onDeny}>
+            <span className="perm-btn-key">N</span> 拒绝
+          </button>
+        </div>
+        {queueCount > 1 && (
+          <div className="perm-card-queue">+{queueCount - 1} pending</div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 const toolColorMap: Record<string, string> = {
   Read: "mint",
   Edit: "coral",
@@ -570,11 +685,12 @@ function ToolStreams({ streams, offset }: { streams: ToolStream[]; offset?: { x:
         const tool = stream.event.tool ?? "Unknown";
         const color = toolColorMap[tool] ?? "steel";
         const detail = stream.event.detail ?? stream.event.title;
+        const slot = stream.exiting ? (stream.exitSlot ?? stream.slot) : stream.slot;
         return (
           <div
             key={stream.event.id}
             className={`tool-stream color-${color} ${stream.exiting ? "exiting" : "active"}`}
-            style={{ top: 34 + stream.slot * 18 }}
+            style={{ top: 34 + slot * 18 }}
           >
             <span className="stream-wake" />
             <span className="stream-core" />
@@ -589,16 +705,50 @@ function ToolStreams({ streams, offset }: { streams: ToolStream[]; offset?: { x:
   );
 }
 
-function Clawd({ state, settings }: { state: PetState; settings: CompanionSettings }) {
+function Clawd({ state, settings, forceIdleBubble }: { state: PetState; settings: CompanionSettings; forceIdleBubble?: boolean }) {
+  const [showIdleBubble, setShowIdleBubble] = useState(false);
+  const idleTimers = useRef<number[]>([]);
+
+  useEffect(() => {
+    if (state !== "idle") {
+      setShowIdleBubble(false);
+      idleTimers.current.forEach(clearTimeout);
+      idleTimers.current = [];
+      return;
+    }
+    function schedule() {
+      const delay = 20_000 + Math.random() * 40_000;
+      const t1 = window.setTimeout(() => {
+        setShowIdleBubble(true);
+        const t2 = window.setTimeout(() => setShowIdleBubble(false), 2500);
+        idleTimers.current.push(t2);
+      }, delay);
+      idleTimers.current = [t1];
+    }
+    schedule();
+    return () => { idleTimers.current.forEach(clearTimeout); idleTimers.current = []; };
+  }, [state]);
+
+  const effectiveBubble = forceIdleBubble || showIdleBubble;
+
   return (
     <section className={`clawd clawd-${state}`} style={{ transform: `scale(${settings.clawdScale})`, opacity: settings.clawdOpacity }} aria-label={`Clawd ${stateCopy[state].label}`}>
-      <ClawdSprite state={state} />
+      <ClawdSprite state={state} idleBubble={effectiveBubble} />
       {settings.showStatusProp && state !== "idle" ? <StateProp state={state} /> : null}
     </section>
   );
 }
 
-function ClawdSprite({ state }: { state: PetState }) {
+function ClawdSprite({ state, idleBubble }: { state: PetState; idleBubble?: boolean }) {
+  if (idleBubble) {
+    return (
+      <>
+        <div className="clawd-glow" />
+        <span className="clawd-sprite clawd-sprite-idle clawd-gif-idle_bubble" aria-hidden="true" />
+        <div className="shadow" />
+      </>
+    );
+  }
   if (state === "idle") {
     return (
       <>
@@ -608,7 +758,8 @@ function ClawdSprite({ state }: { state: PetState }) {
       </>
     );
   }
-  return <span className={`clawd-sprite clawd-sprite-${state} clawd-gif-${clawdGifName[state]}`} aria-hidden="true" />;
+  const spriteState = state === "tool_mcp" ? "thinking" : state;
+  return <span className={`clawd-sprite clawd-sprite-${spriteState} clawd-gif-${clawdGifName[state]}`} aria-hidden="true" />;
 }
 
 function StateProp({ state }: { state: PetState }) {
@@ -624,13 +775,35 @@ function StateProp({ state }: { state: PetState }) {
 }
 
 function SettingsApp() {
-  const { settings, updateSettings, connection, events, petState } = useCompanion();
+  const { settings, updateSettings, connection, events, petState, toolStreams } = useCompanion();
   const [copied, setCopied] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState("overview");
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [now, setNow] = useState(Date.now());
-  const hookCommand = "node D:/build/GitLocal/claude-code-companion/dist/hook-forwarder/index.js";
+  const [appVersion, setAppVersion] = useState("...");
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({
+    checking: false,
+    available: false,
+    upToDate: false,
+    downloaded: false,
+    downloading: false
+  });
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [previewIdleBubble, setPreviewIdleBubble] = useState(false);
+  const hookCommand = "node D:/build/GitLocal/Clawd-Companion/dist/hook-forwarder/index.js";
   const hookConfigPath = "C:/Users/Doulor/.claude/settings.json";
   const hookSnippet = useMemo(() => buildHookSnippet(hookCommand), [hookCommand]);
+
+  useEffect(() => {
+    window.companion.getAppVersion().then(setAppVersion);
+    window.companion.getUpdateStatus().then(setUpdateStatus);
+    const offUpdate = window.companion.onUpdateStatus(setUpdateStatus);
+    const offIdle = window.companion.onTriggerIdleBubble(() => {
+      setPreviewIdleBubble(true);
+      setTimeout(() => setPreviewIdleBubble(false), 2500);
+    });
+    return () => { offUpdate(); offIdle(); };
+  }, []);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
@@ -667,6 +840,26 @@ function SettingsApp() {
     window.setTimeout(() => setCopied(current => current === key ? null : current), 1600);
   }
 
+  async function handleCheckUpdate() {
+    setCheckingUpdate(true);
+    setUpdateStatus(prev => ({ ...prev, error: undefined }));
+    try {
+      const result = await Promise.race([
+        window.companion.checkForUpdates(),
+        new Promise<{ ok: boolean; error?: string }>(resolve =>
+          setTimeout(() => resolve({ ok: false, error: "检查超时，请检查网络连接后重试。" }), 15_000)
+        )
+      ]);
+      if (!result.ok) {
+        setUpdateStatus(prev => ({ ...prev, error: result.error }));
+      }
+    } catch {
+      setUpdateStatus(prev => ({ ...prev, error: "检查更新失败，请稍后重试。" }));
+    } finally {
+      setCheckingUpdate(false);
+    }
+  }
+
   return (
     <main className="settings-shell">
       <section className="window-bar">
@@ -695,7 +888,7 @@ function SettingsApp() {
             <code>{shortSession(connection.activeSessionId)}</code>
           </div>
         </div>
-        <div className="mini-stage"><div className="mini-pet"><Clawd state={petState} settings={settings} /></div></div>
+        <div className="mini-stage"><div className="mini-pet"><Clawd key={previewIdleBubble ? "bubble" : "idle"} state={petState} settings={settings} forceIdleBubble={previewIdleBubble} /></div></div>
       </section>
 
       <section className="status-strip">
@@ -724,12 +917,12 @@ function SettingsApp() {
           </div>
         </Panel>
 
-        <Panel id="appearance" title="桌宠外观" icon={<Bot size={18} />}>
+        <Panel id="appearance" title="桌宠外观" icon={<Bot size={18} />} wide>
           <Toggle label="启用桌宠" checked={settings.petEnabled} onChange={petEnabled => updateSettings({ petEnabled })} />
           <Toggle label="始终置顶" checked={settings.alwaysOnTop} onChange={alwaysOnTop => updateSettings({ alwaysOnTop })} />
           <Toggle label="完全点击穿透" checked={settings.clickThrough} onChange={clickThrough => updateSettings({ clickThrough })} />
           <Toggle label="显示气泡" checked={settings.showBubbles} onChange={showBubbles => updateSettings({ showBubbles })} />
-          <Toggle label="显示状态道具" checked={settings.showStatusProp} onChange={showStatusProp => updateSettings({ showStatusProp })} />
+          <Toggle label="显示状态图标" checked={settings.showStatusProp} onChange={showStatusProp => updateSettings({ showStatusProp })} />
           <Toggle label="编辑桌宠位置" checked={settings.editPosition} onChange={editPosition => updateSettings({ editPosition })} />
           {settings.editPosition ? <button className="inline-action" onClick={() => updateSettings({ positionOffsets: defaultSettings.positionOffsets, zoneSizes: defaultSettings.zoneSizes, clawdScale: defaultSettings.clawdScale, thoughtScale: defaultSettings.thoughtScale, bubbleScale: defaultSettings.bubbleScale, cardScale: defaultSettings.cardScale, petScale: defaultSettings.petScale, viewScale: defaultSettings.viewScale })}>重置全部</button> : null}
           <Slider label="整体尺寸" min={0.7} max={1.45} step={0.05} value={settings.petScale} format={value => `${Math.round(value * 100)}%`} onChange={petScale => updateSettings({ petScale })} />
@@ -751,44 +944,54 @@ function SettingsApp() {
           <Slider label="气泡停留" min={3} max={18} step={1} value={settings.bubbleDuration} format={value => `${value} 秒`} onChange={bubbleDuration => updateSettings({ bubbleDuration })} />
           <Slider label="工具流停留" min={0.3} max={3} step={0.1} value={settings.toolStreamMinDuration} format={value => `${value.toFixed(1)} 秒`} onChange={toolStreamMinDuration => updateSettings({ toolStreamMinDuration })} />
           <Slider label="事件历史" min={12} max={100} step={4} value={settings.eventHistoryLimit} format={value => `${value} 条`} onChange={eventHistoryLimit => updateSettings({ eventHistoryLimit })} />
-          <div className="panel-divider" />
-          <h3 className="panel-subtitle">工具显示方式</h3>
-          <p className="note" style={{ marginTop: 0, marginBottom: 10 }}>为每种工具单独设置显示方式。设为"跟随"则使用上方的状态默认设置。</p>
-          {toolFeedbackRows.map(row => (
-            <div key={row.tool} className="feedback-mode-row">
-              <span>{row.label}</span>
-              <div>
-                <button className={!settings.toolFeedbackModes?.[row.tool] ? "active" : ""} onClick={() => { const next = { ...(settings.toolFeedbackModes ?? {}) }; delete next[row.tool]; updateSettings({ toolFeedbackModes: next }); }}>跟随</button>
-                <button className={settings.toolFeedbackModes?.[row.tool] === "thought" ? "active" : ""} onClick={() => updateSettings({ toolFeedbackModes: { ...(settings.toolFeedbackModes ?? {}), [row.tool]: "thought" } })}>气泡</button>
-                <button className={settings.toolFeedbackModes?.[row.tool] === "card" ? "active" : ""} onClick={() => updateSettings({ toolFeedbackModes: { ...(settings.toolFeedbackModes ?? {}), [row.tool]: "card" } })}>卡片</button>
-                <button className={settings.toolFeedbackModes?.[row.tool] === "ribbon" ? "active" : ""} onClick={() => updateSettings({ toolFeedbackModes: { ...(settings.toolFeedbackModes ?? {}), [row.tool]: "ribbon" } })}>条</button>
-              </div>
+        </Panel>
+
+        <Panel title="运行统计" icon={<Gauge size={18} />}>
+          <div className="stats-grid">
+            <div className="stat-item">
+              <span className="stat-value">{events.length}</span>
+              <span className="stat-label">事件总数</span>
             </div>
-          ))}
-        </Panel>
-
-        <Panel id="privacy" title="隐私和端口" icon={<Shield size={18} />}>
-          <Field label="事件端口">
-            <input value={settings.port} onChange={event => updateSettings({ port: Number(event.target.value) || defaultSettings.port })} />
-          </Field>
-          <Field label="本地 token">
-            <input value={settings.token} onChange={event => updateSettings({ token: event.target.value })} />
-          </Field>
-          <Segmented value={settings.privacyMode} onChange={privacyMode => updateSettings({ privacyMode })} />
-          <p className="note">安全模式只显示工具类型；标准模式显示文件名和搜索模式；详细模式可显示被截断的命令摘要，但仍不会展示完整 prompt 或命令输出。</p>
-        </Panel>
-
-        <Panel title="状态配对" icon={<Radio size={18} />}>
-          <div className="mapping-list">
-            {mappingRows.map(row => <MappingRow key={`${row.source}-${row.tool ?? row.state}`} row={row} />)}
+            <div className="stat-item">
+              <span className="stat-value">{toolStreams.filter(s => !s.exiting).length}</span>
+              <span className="stat-label">活跃工具</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-value">{events.filter(e => e.event === "tool_start").length}</span>
+              <span className="stat-label">工具调用</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-value">{connection.lastEventAt ? timeAgo(connection.lastEventAt, now) : "—"}</span>
+              <span className="stat-label">最后活动</span>
+            </div>
           </div>
+          <div className="panel-divider" />
+          <Toggle label="高级选项" checked={showAdvanced} onChange={setShowAdvanced} />
         </Panel>
 
-        <Panel title="测试事件" icon={<Play size={18} />}>
-          <div className="test-grid">
-            {sampleEvents.map(event => <button key={`${event.event}-${event.tool ?? "x"}`} onClick={() => test(event)}>{event.title}</button>)}
-          </div>
-        </Panel>
+        {showAdvanced && (
+          <Panel id="privacy" title="隐私和端口" icon={<Shield size={18} />}>
+            <Field label="事件端口">
+              <input value={settings.port} onChange={event => updateSettings({ port: Number(event.target.value) || defaultSettings.port })} />
+            </Field>
+            <Field label="本地 token">
+              <input value={settings.token} onChange={event => updateSettings({ token: event.target.value })} />
+            </Field>
+            <Segmented value={settings.privacyMode} onChange={privacyMode => updateSettings({ privacyMode })} />
+            <p className="note">安全模式只显示工具类型；标准模式显示文件名和搜索模式；详细模式可显示被截断的命令摘要，但仍不会展示完整 prompt 或命令输出。</p>
+          </Panel>
+        )}
+
+        {showAdvanced && (
+          <Panel title="测试事件" icon={<Play size={18} />}>
+            <div className="test-grid">
+              {sampleEvents.map(event => <button key={`${event.event}-${event.tool ?? "x"}`} onClick={() => test(event)}>{event.title}</button>)}
+              <button onClick={() => window.companion.triggerIdleBubble()}>
+                待机动画
+              </button>
+            </div>
+          </Panel>
+        )}
 
         <Panel title="最近事件" icon={<Bell size={18} />} wide>
           <div className="event-list">
@@ -804,6 +1007,44 @@ function SettingsApp() {
           </div>
         </Panel>
       </section>
+
+      <footer className="version-bar">
+        <div className="version-left">
+          <span className="version-label">Clawd Companion</span>
+          <span className="version-number">v{appVersion}</span>
+          <a
+            className="version-link"
+            href="https://github.com/Doulor/Clawd-Companion"
+            target="_blank"
+            rel="noreferrer"
+            title="在 GitHub 上查看"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.605-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12 24 5.37 18.63 0 12 0z"/></svg>
+            GitHub
+          </a>
+        </div>
+        <div className="version-right">
+          {updateStatus.error ? (
+            <span className="update-error">{updateStatus.error}</span>
+          ) : updateStatus.downloaded ? (
+            <button className="update-btn update-ready" onClick={() => window.companion.installUpdate()}>
+              点击重启并安装 v{updateStatus.version}
+            </button>
+          ) : updateStatus.downloading ? (
+            <span className="update-progress">下载中 {Math.round(updateStatus.progress ?? 0)}%</span>
+          ) : updateStatus.checking ? (
+            <span className="update-checking">正在检查更新...</span>
+          ) : updateStatus.available ? (
+            <span className="update-available">发现新版本 v{updateStatus.version}，正在下载...</span>
+          ) : updateStatus.upToDate ? (
+            <span className="update-uptodate"><Check size={14} />已是最新版本</span>
+          ) : (
+            <button className="update-btn" onClick={handleCheckUpdate} disabled={checkingUpdate}>
+              {checkingUpdate ? "检查中..." : "检查更新"}
+            </button>
+          )}
+        </div>
+      </footer>
     </main>
   );
 }
