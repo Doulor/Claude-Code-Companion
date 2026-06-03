@@ -31,6 +31,12 @@
       "dist/**/*",
       "build/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "dist/hook-forwarder",
+        "to": "hook-forwarder"
+      }
+    ],
     "win": {
       "target": "nsis",
       "icon": "build/icon.ico"
