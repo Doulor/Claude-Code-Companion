@@ -77,6 +77,7 @@ export interface CompanionSettings {
   bubbleScale: number;
   bubbleOpacity: number;
   bubbleDuration: number;
+  toolStreamMinDuration: number;
   feedbackModes: Partial<Record<PetState, FeedbackMode>>;
   toolFeedbackModes: Partial<Record<ToolName, FeedbackMode>>;
   showStatusProp: boolean;
@@ -137,6 +138,7 @@ export const defaultSettings: CompanionSettings = {
   bubbleScale: 1,
   bubbleOpacity: 1,
   bubbleDuration: 8,
+  toolStreamMinDuration: 0.8,
   feedbackModes: {
     thinking: "card",
     tool_read: "thought",

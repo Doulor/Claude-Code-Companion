@@ -477,61 +477,135 @@ button { border: 0; cursor: pointer; }
   0%, 100% { opacity: .5; }
   50% { opacity: .9; }
 }
-.tool-ribbon {
+/* Tool Streams - 工具调用气流 */
+.tool-streams {
   position: absolute;
-  left: -40px;
-  bottom: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  left: -142px;
+  bottom: 82px;
+  width: 460px;
+  height: 150px;
   z-index: 8;
-  transform-origin: bottom left;
+  pointer-events: none;
+  transform-origin: center;
 }
-.ribbon-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 8px 0 6px;
-  border-radius: 6px;
-  border-left: 3px solid var(--steel);
-  background: rgba(255, 249, 234, 0.94);
-  box-shadow: 0 4px 14px rgba(43, 31, 21, 0.1);
-  backdrop-filter: blur(10px);
-  animation: ribbon-slide 320ms cubic-bezier(.2,.8,.2,1) both;
-  white-space: nowrap;
+.tool-stream {
+  position: absolute;
+  left: 0;
+  width: 340px;
+  height: 34px;
+  color: var(--steel);
+  opacity: .98;
+  transform: translate(32px, 0) rotate(-4deg) scaleX(1);
+  animation: stream-leave 520ms cubic-bezier(.58,.04,.86,.42) reverse both, stream-hover 1.25s ease-in-out 560ms infinite;
+}
+.tool-stream.exiting {
+  animation: stream-exit 720ms cubic-bezier(.2,.72,.16,1) both;
+}
+.stream-wake {
+  position: absolute;
+  left: 0;
+  top: 11px;
+  width: 172px;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, currentColor 10%, transparent) 20%, color-mix(in srgb, currentColor 42%, transparent) 78%, transparent 100%);
+  filter: blur(2px);
+  transform: skewX(-18deg);
+}
+.stream-wake::before,
+.stream-wake::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  width: 78px;
+  height: 1px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 45%, transparent);
+}
+.stream-wake::before { top: -4px; opacity: .5; }
+.stream-wake::after { bottom: -4px; opacity: .34; }
+.stream-core {
+  position: absolute;
+  left: 96px;
+  top: 12px;
+  width: 54px;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, currentColor 20%, transparent), currentColor 68%, rgba(255, 248, 219, .96));
+  box-shadow: 0 0 14px color-mix(in srgb, currentColor 48%, transparent);
+}
+.stream-holo {
+  position: absolute;
+  left: 174px;
+  top: 3px;
+  width: 176px;
+  height: 28px;
+  display: grid;
+  align-content: center;
+  gap: 1px;
+  padding-left: 10px;
+  color: currentColor;
+  text-shadow: 0 0 4px color-mix(in srgb, currentColor 36%, transparent);
+  opacity: .98;
+  transform: skewX(-7deg);
   overflow: hidden;
 }
-.ribbon-row.ribbon-done { opacity: .45; }
-.ribbon-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  flex-shrink: 0;
+.stream-holo::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 3px;
+  bottom: 3px;
+  width: 1px;
   background: currentColor;
+  box-shadow: 0 0 12px currentColor;
+  opacity: .45;
 }
-.ribbon-icon {
-  width: 16px;
-  text-align: center;
+.stream-holo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(180deg, transparent 0 6px, color-mix(in srgb, currentColor 10%, transparent) 6px 7px);
+  opacity: .32;
+  mix-blend-mode: screen;
+  animation: holo-scan 1.4s linear infinite;
+}
+.stream-tool-name {
+  position: absolute;
+  left: 126px;
+  top: 5px;
+  z-index: 2;
+  max-width: 82px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0;
+  color: var(--ink);
+  text-shadow: 0 0 1px rgba(255,255,255,.9), 0 0 10px color-mix(in srgb, currentColor 48%, transparent);
+}
+.color-ink .stream-tool-name {
+  color: #fff8dc;
+  text-shadow: 0 1px 2px rgba(0,0,0,.65), 0 0 12px rgba(255, 245, 200, .62);
+}
+.stream-detail {
+  position: relative;
+  z-index: 1;
+  max-width: 164px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: "Cascadia Mono", "Consolas", monospace;
   font-size: 10px;
   font-weight: 800;
-  font-family: "Cascadia Mono", "Consolas", monospace;
-  color: var(--ink);
-  background: rgba(36, 29, 23, 0.08);
-  border-radius: 3px;
-  line-height: 16px;
+  color: color-mix(in srgb, currentColor 88%, var(--ink));
+  opacity: .98;
 }
-.ribbon-label {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--ink);
-}
-.ribbon-detail {
-  font-size: 10px;
-  color: var(--muted);
-  max-width: 80px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.color-ink .stream-detail {
+  color: #fff1bd;
+  text-shadow: 0 1px 2px rgba(0,0,0,.68), 0 0 10px rgba(255, 241, 189, .45);
 }
 .color-mint { border-left-color: var(--mint); color: var(--mint); }
 .color-coral { border-left-color: var(--coral); color: var(--coral); }
@@ -540,10 +614,23 @@ button { border: 0; cursor: pointer; }
 .color-steel { border-left-color: var(--steel); color: var(--steel); }
 .color-honey { border-left-color: var(--honey); color: var(--honey); }
 .color-purple { border-left-color: var(--purple); color: var(--purple); }
-
-@keyframes ribbon-slide {
-  from { opacity: 0; transform: translateX(-12px); }
-  to { opacity: 1; transform: translateX(0); }
+@keyframes stream-hover {
+  0%, 100% { transform: translate(32px, 0) rotate(-4deg) scaleX(1); opacity: .94; }
+  50% { transform: translate(36px, -3px) rotate(-2deg) scaleX(1.02); opacity: 1; }
+}
+@keyframes stream-leave {
+  0% { opacity: .98; transform: translate(32px, 0) rotate(-4deg) scaleX(1); filter: blur(0); }
+  100% { opacity: 0; transform: translate(214px, -42px) rotate(10deg) scaleX(.58); filter: blur(5px); }
+}
+@keyframes stream-exit {
+  0% { opacity: .98; transform: translate(32px, 0) rotate(-4deg) scaleX(1); filter: blur(0); }
+  42% { opacity: .92; transform: translate(94px, -12px) rotate(2deg) scaleX(.92); filter: blur(.3px); }
+  72% { opacity: .46; transform: translate(164px, -30px) rotate(8deg) scaleX(.72); filter: blur(2px); }
+  100% { opacity: 0; transform: translate(228px, -48px) rotate(12deg) scaleX(.54); filter: blur(5px); }
+}
+@keyframes holo-scan {
+  from { transform: translateY(-8px); }
+  to { transform: translateY(8px); }
 }
 
 .shadow {

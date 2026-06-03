@@ -403,9 +403,13 @@ interface HooksStatus {
   commandMatches: boolean;
 }
 
+function normalizeCommandPath(pathLike: string): string {
+  return pathLike.replaceAll(String.fromCharCode(92), "/");
+}
+
 function getHookCommand(): string {
-  const devPath = join(__dirname, "../../dist/hook-forwarder/index.js");
-  const prodPath = join(process.resourcesPath, "dist/hook-forwarder/index.js");
+  const devPath = normalizeCommandPath(join(__dirname, "../../dist/hook-forwarder/index.js"));
+  const prodPath = normalizeCommandPath(join(process.resourcesPath, "dist/hook-forwarder/index.js"));
   return `node ${existsSync(devPath) ? devPath : prodPath}`;
 }
 

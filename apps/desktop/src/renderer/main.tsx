@@ -128,6 +128,12 @@ function makeEvent(event: CompanionEvent["event"], source: CompanionEvent["sourc
   };
 }
 
+interface ToolStream {
+  event: CompanionEvent;
+  exiting: boolean;
+  slot: number;
+}
+
 function useCompanion() {
   const [settings, setSettings] = useState<CompanionSettings>(defaultSettings);
   const [connection, setConnection] = useState<CompanionConnectionStatus>({
@@ -140,12 +146,27 @@ function useCompanion() {
   const [events, setEvents] = useState<CompanionEvent[]>([]);
   const [currentEvent, setCurrentEvent] = useState<CompanionEvent | null>(null);
   const [petState, setPetState] = useState<PetState>("idle");
-  const [toolRibbon, setToolRibbon] = useState<CompanionEvent[]>([]);
+  const [toolStreams, setToolStreams] = useState<ToolStream[]>([]);
   const ribbonTimers = useRef<Map<string, number>>(new Map());
   const ribbonTimestamps = useRef<Map<string, number>>(new Map());
 
-  function removeRibbonEntry(eventId: string) {
-    setToolRibbon(previous => previous.filter(e => e.id !== eventId));
+  function scheduleStreamRemoval(eventId: string) {
+    window.setTimeout(() => {
+      setToolStreams(previous => previous.filter(s => s.event.id !== eventId));
+      ribbonTimers.current.delete(eventId);
+      ribbonTimestamps.current.delete(eventId);
+    }, 780);
+  }
+
+  function markExiting(eventId: string) {
+    setToolStreams(previous => previous.map(s =>
+      s.event.id === eventId ? { ...s, exiting: true } : s
+    ));
+    scheduleStreamRemoval(eventId);
+  }
+
+  function removeSatellite(eventId: string) {
+    setToolStreams(previous => previous.filter(s => s.event.id !== eventId));
     ribbonTimers.current.delete(eventId);
     ribbonTimestamps.current.delete(eventId);
   }
@@ -158,33 +179,36 @@ function useCompanion() {
     const offEvent = window.companion.onEvent(event => {
       setEvents(previous => [event, ...previous].slice(0, settings.eventHistoryLimit));
 
-      // tool_end 处理：找到匹配的 tool_start 并移除 ribbon 条目
+      // tool_end 处理：找到匹配的 tool_start 并标记退出
       if (event.event === "tool_end") {
-        const matchingStart = toolRibbon.find(
-          e => e.event === "tool_start" && e.tool === event.tool
-        );
-        if (matchingStart) {
-          const addedAt = ribbonTimestamps.current.get(matchingStart.id) ?? Date.now();
+        setToolStreams(previous => {
+          const matching = previous.find(
+            s => s.event.event === "tool_start" && s.event.tool === event.tool && !s.exiting
+          );
+          if (!matching) return previous;
+
+          const addedAt = ribbonTimestamps.current.get(matching.event.id) ?? Date.now();
           const elapsed = Date.now() - addedAt;
-          const MIN_DISPLAY_MS = 800;
+          const minDisplayMs = Math.max(300, settings.toolStreamMinDuration * 1000);
 
           // 清除保底超时
-          const fallbackId = ribbonTimers.current.get(matchingStart.id);
+          const fallbackId = ribbonTimers.current.get(matching.event.id);
           if (fallbackId) window.clearTimeout(fallbackId);
-          ribbonTimers.current.delete(matchingStart.id);
+          ribbonTimers.current.delete(matching.event.id);
 
-          if (elapsed >= MIN_DISPLAY_MS) {
-            // 已显示够久，立即移除
-            removeRibbonEntry(matchingStart.id);
+          if (elapsed >= minDisplayMs) {
+            // 已显示够久，立即标记退出
+            markExiting(matching.event.id);
           } else {
-            // 还没到最少显示时间，延迟移除
-            const delay = MIN_DISPLAY_MS - elapsed;
+            // 还没到最少显示时间，延迟标记退出
+            const delay = minDisplayMs - elapsed;
             const delayTimeout = window.setTimeout(() => {
-              removeRibbonEntry(matchingStart.id);
+              markExiting(matching.event.id);
             }, delay);
-            ribbonTimers.current.set(matchingStart.id, delayTimeout);
+            ribbonTimers.current.set(matching.event.id, delayTimeout);
           }
-        }
+          return previous;
+        });
         // tool_end 不改变 petState 和 currentEvent
       } else {
         // 非 tool_end 事件：更新状态和当前事件
@@ -192,14 +216,30 @@ function useCompanion() {
         setCurrentEvent(event);
       }
 
-      // tool_start 处理：添加到 ribbon 并设置保底超时
+      // tool_start 处理：添加到工具流列表并设置保底超时
       if (event.event === "tool_start") {
-        setToolRibbon(previous => [event, ...previous].slice(0, 8));
+        let overflowId: string | undefined;
+        setToolStreams(previous => {
+          const active = previous.filter(s => !s.exiting);
+          const overflow = active.length >= 5 ? active.at(-1) : undefined;
+          if (overflow) {
+            overflowId = overflow.event.id;
+            const fallbackId = ribbonTimers.current.get(overflow.event.id);
+            if (fallbackId) window.clearTimeout(fallbackId);
+            ribbonTimers.current.delete(overflow.event.id);
+          }
+          const next = previous.map(s => {
+            const exiting = overflow && s.event.id === overflow.event.id ? true : s.exiting;
+            return exiting ? { ...s, exiting } : { ...s, slot: Math.min(s.slot + 1, 4) };
+          });
+          return [{ event, exiting: false, slot: 0 }, ...next].slice(0, 8);
+        });
+        if (overflowId) scheduleStreamRemoval(overflowId);
         ribbonTimestamps.current.set(event.id, Date.now());
 
         // 设置保底超时：如果 tool_end 一直不来，最长显示 10 秒
         const fallbackTimeout = window.setTimeout(() => {
-          removeRibbonEntry(event.id);
+          markExiting(event.id);
         }, 10_000);
         ribbonTimers.current.set(event.id, fallbackTimeout);
       }
@@ -220,18 +260,18 @@ function useCompanion() {
       ribbonTimers.current.clear();
       ribbonTimestamps.current.clear();
     };
-  }, [settings.bubbleDuration, settings.eventHistoryLimit]);
+  }, [settings.bubbleDuration, settings.eventHistoryLimit, settings.toolStreamMinDuration]);
 
   async function updateSettings(next: Partial<CompanionSettings>) {
     const saved = await window.companion.saveSettings(next);
     setSettings(saved);
   }
 
-  return { settings, updateSettings, connection, events, currentEvent, petState, toolRibbon };
+  return { settings, updateSettings, connection, events, currentEvent, petState, toolStreams };
 }
 
 function PetApp() {
-  const { settings, updateSettings, currentEvent, petState, toolRibbon } = useCompanion();
+  const { settings, updateSettings, currentEvent, petState, toolStreams } = useCompanion();
   const editMode = settings.editPosition;
   const dragging = useRef<string | null>(null);
   const dragStart = useRef<{ mx: number; my: number; ox: number; oy: number }>({ mx: 0, my: 0, ox: 0, oy: 0 });
@@ -258,7 +298,7 @@ function PetApp() {
     const handle = (e: MouseEvent) => {
       if (dragging.current) return;
       const target = e.target as HTMLElement;
-      void window.companion.setPetInteractive(!!target.closest('.clawd, .bubble-wrapper, .tool-ribbon'));
+      void window.companion.setPetInteractive(!!target.closest('.clawd, .bubble-wrapper, .tool-streams'));
     };
     window.addEventListener('mousemove', handle);
     return () => {
@@ -313,8 +353,8 @@ function PetApp() {
     () => makeEvent("tool_start", "manual", "编辑模式预览", "这是桌宠实际显示的卡片 / 气泡位置。", "Edit"),
     []
   );
-  const editPreviewRibbon = useMemo(
-    () => [makeEvent("tool_start", "manual", "工具条预览", "Edit 工具条位置预览。", "Edit")],
+  const editPreviewStreams = useMemo(
+    () => [{ event: makeEvent("tool_start", "manual", "工具指示器预览", "Edit 工具指示器位置预览。", "Edit"), exiting: false, slot: 0 }],
     []
   );
 
@@ -356,7 +396,7 @@ function PetApp() {
   if (editMode) {
     const previewEvent = currentEvent ?? editPreviewEvent;
     const previewState = currentEvent ? petState : stateFromEvent(previewEvent);
-    const previewRibbon = toolRibbon.length > 0 ? toolRibbon : editPreviewRibbon;
+    const previewStreams = toolStreams.length > 0 ? toolStreams : editPreviewStreams;
     const bubbleMode = getFeedbackMode(previewEvent, settings);
     const cw = Math.round(226 * settings.clawdScale);
     const ch = Math.round(238 * settings.clawdScale);
@@ -390,7 +430,7 @@ function PetApp() {
               {settings.showStatusProp && previewState !== "idle" ? <StateProp state={previewState} /> : null}
             </div>
             {settings.showBubbles ? (
-              <ToolRibbon events={previewRibbon} settings={settings} offset={offsets.ribbon} />
+              <ToolStreams streams={previewStreams} offset={offsets.ribbon} />
             ) : null}
           </div>
           <div className="edit-zone edit-zone-clawd"
@@ -442,23 +482,8 @@ function PetApp() {
           <ClawdSprite state={petState} />
           {settings.showStatusProp && petState !== "idle" ? <StateProp state={petState} /> : null}
         </div>
-        {settings.showBubbles && toolRibbon.length > 0 ? (
-          <div className="tool-ribbon" style={{ transform: `translate(${offsets.ribbon?.x ?? 0}px, ${offsets.ribbon?.y ?? 0}px)` }}>
-            {toolRibbon.slice(0, 5).map((event) => {
-              const tool = event.tool ?? "Unknown";
-              const color = toolColorMap[tool] ?? "steel";
-              const isEnd = event.event === "tool_end";
-              const icon = toolIconMap[tool] ?? "?";
-              return (
-                <div key={event.id} className={`ribbon-row color-${color} ${isEnd ? "ribbon-done" : ""}`}>
-                  <span className="ribbon-dot" />
-                  <code className="ribbon-icon">{icon}</code>
-                  <span className="ribbon-label">{tool}</span>
-                  {event.detail ? <span className="ribbon-detail">{event.detail}</span> : null}
-                </div>
-              );
-            })}
-          </div>
+        {settings.showBubbles && toolStreams.length > 0 ? (
+          <ToolStreams streams={toolStreams} offset={offsets.ribbon} />
         ) : null}
       </section>
     </main>
@@ -536,25 +561,27 @@ const toolIconMap: Record<string, string> = {
   Unknown: "?"
 };
 
-function ToolRibbon({ events, settings, offset }: { events: CompanionEvent[]; settings: CompanionSettings; offset?: { x: number; y: number } }) {
-  const translate = offset ? `translate(${offset.x}px, ${offset.y}px) ` : "";
+function ToolStreams({ streams, offset }: { streams: ToolStream[]; offset?: { x: number; y: number } }) {
+  const visible = streams.filter((stream, index) => stream.exiting || streams.slice(0, index).filter(s => !s.exiting).length < 5);
+
   return (
-    <div className="tool-ribbon" style={{ transform: `${translate}scale(${settings.bubbleScale})`, opacity: settings.bubbleOpacity }}>
-      {events.slice(0, 5).map((event, index) => {
-        const tool = event.tool ?? "Unknown";
+    <div className="tool-streams" style={{ transform: `translate(${offset?.x ?? 0}px, ${offset?.y ?? 0}px)` }}>
+      {visible.map((stream) => {
+        const tool = stream.event.tool ?? "Unknown";
         const color = toolColorMap[tool] ?? "steel";
-        const isEnd = event.event === "tool_end";
-        const icon = toolIconMap[tool] ?? "?";
+        const detail = stream.event.detail ?? stream.event.title;
         return (
           <div
-            key={event.id}
-            className={`ribbon-row color-${color} ${isEnd ? "ribbon-done" : ""}`}
-            style={{ animationDelay: `${index * 35}ms` }}
+            key={stream.event.id}
+            className={`tool-stream color-${color} ${stream.exiting ? "exiting" : "active"}`}
+            style={{ top: 34 + stream.slot * 18 }}
           >
-            <span className="ribbon-dot" />
-            <code className="ribbon-icon">{icon}</code>
-            <span className="ribbon-label">{tool}</span>
-            {event.detail ? <span className="ribbon-detail">{event.detail}</span> : null}
+            <span className="stream-wake" />
+            <span className="stream-core" />
+            <span className="stream-tool-name">{tool}</span>
+            <span className="stream-holo" aria-hidden="true">
+              <span className="stream-detail">{detail}</span>
+            </span>
           </div>
         );
       })}
@@ -722,6 +749,7 @@ function SettingsApp() {
           <Toggle label="启动时打开配置面板" checked={settings.openSettingsOnStart} onChange={openSettingsOnStart => updateSettings({ openSettingsOnStart })} />
           <Toggle label="完成时系统通知" checked={settings.doneSound} onChange={doneSound => updateSettings({ doneSound })} />
           <Slider label="气泡停留" min={3} max={18} step={1} value={settings.bubbleDuration} format={value => `${value} 秒`} onChange={bubbleDuration => updateSettings({ bubbleDuration })} />
+          <Slider label="工具流停留" min={0.3} max={3} step={0.1} value={settings.toolStreamMinDuration} format={value => `${value.toFixed(1)} 秒`} onChange={toolStreamMinDuration => updateSettings({ toolStreamMinDuration })} />
           <Slider label="事件历史" min={12} max={100} step={4} value={settings.eventHistoryLimit} format={value => `${value} 条`} onChange={eventHistoryLimit => updateSettings({ eventHistoryLimit })} />
           <div className="panel-divider" />
           <h3 className="panel-subtitle">工具显示方式</h3>
