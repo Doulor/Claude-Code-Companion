@@ -134,6 +134,9 @@ export interface CompanionSettings {
   permissionOpacity: number;
   toolStreamMinDuration: number;
   showStatusProp: boolean;
+  multiSessionEnabled: boolean;
+  showSessionTitle: boolean;
+  companionScale: number;
   launchAtLogin: boolean;
   openSettingsOnStart: boolean;
   doneSound: boolean;
@@ -178,6 +181,15 @@ export interface UpdateStatus {
   error?: string;
 }
 
+export interface CompanionSession {
+  sessionId: string;
+  title: string;
+  state: PetState;
+  lastEvent: CompanionEvent | null;
+  lastEventTime: number;
+  isActive: boolean;
+}
+
 export interface CompanionConnectionStatus {
   port: number;
   serverListening: boolean;
@@ -219,6 +231,9 @@ export const defaultSettings: CompanionSettings = {
   permissionOpacity: 1,
   toolStreamMinDuration: 0.8,
   showStatusProp: true,
+  multiSessionEnabled: false,
+  showSessionTitle: true,
+  companionScale: 0.6,
   launchAtLogin: false,
   openSettingsOnStart: true,
   doneSound: false,

@@ -1323,6 +1323,58 @@ input[type="range"]:focus { box-shadow: none; }
   font-weight: 600;
 }
 
+/* Companion Clawd */
+.companion-clawd {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  transform-origin: bottom center;
+  pointer-events: none;
+  z-index: 5;
+}
+.companion-enter {
+  animation: companion-appear 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+.companion-exit {
+  animation: companion-disappear 0.6s ease-out forwards;
+}
+@keyframes companion-appear {
+  from {
+    opacity: 0;
+    transform: translateY(-30px) scale(var(--companion-scale, 0.6));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(var(--companion-scale, 0.6));
+  }
+}
+@keyframes companion-disappear {
+  0% {
+    opacity: 1;
+    transform: scale(var(--companion-scale, 0.6)) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(calc(var(--companion-scale, 0.6) * 0.3)) translateY(-40px);
+  }
+}
+.companion-title {
+  position: absolute;
+  top: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+  background: rgba(255, 252, 244, 0.85);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  pointer-events: none;
+  z-index: 10;
+}
+
 .state-anim-settings {
   display: flex;
   flex-direction: column;

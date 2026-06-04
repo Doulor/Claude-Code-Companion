@@ -24,7 +24,7 @@ import {
   Wrench,
   X
 } from "lucide-react";
-import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings, FeedbackMode, IdleAnimConfig, PetState, PrivacyMode, PermissionRequest, ToolName, UpdateStatus } from "../shared/events";
+import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings, CompanionSession, FeedbackMode, IdleAnimConfig, PetState, PrivacyMode, PermissionRequest, ToolName, UpdateStatus } from "../shared/events";
 import { defaultSettings, stateFromEvent } from "../shared/events";
 import clawdImage from "./clawd.png";
 import "./clawd-sprites/sprites.css";
@@ -133,6 +133,8 @@ function useCompanion() {
   const [petState, setPetState] = useState<PetState>("idle");
   const [toolStreams, setToolStreams] = useState<ToolStream[]>([]);
   const [activePermissions, setActivePermissions] = useState<PermissionRequest[]>([]);
+  const [sessions, setSessions] = useState<CompanionSession[]>([]);
+  const sessionsRef = useRef<Map<string, CompanionSession>>(new Map());
   const ribbonTimers = useRef<Map<string, number>>(new Map());
   const ribbonTimestamps = useRef<Map<string, number>>(new Map());
   const eventThrottleRef = useRef<{ timer: number | null; lastFlush: number }>({ timer: null, lastFlush: 0 });
@@ -172,6 +174,26 @@ function useCompanion() {
     const offSettings = window.companion.onSettings(setSettings);
     const offConnection = window.companion.onConnection(setConnection);
     const offEvent = window.companion.onEvent(event => {
+      // 多会话追踪
+      if (event.sessionId) {
+        const sid = event.sessionId;
+        const existing = sessionsRef.current.get(sid);
+        let title = existing?.title ?? "";
+        if (event.event === "prompt_submit" && !title) {
+          title = event.message.slice(0, 20) || sid.slice(0, 6);
+        }
+        const session: CompanionSession = {
+          sessionId: sid,
+          title: title || (existing?.title) || sid.slice(0, 6),
+          state: stateFromEvent(event),
+          lastEvent: event,
+          lastEventTime: Date.now(),
+          isActive: event.event !== "done" && event.event !== "error"
+        };
+        sessionsRef.current.set(sid, session);
+        setSessions(Array.from(sessionsRef.current.values()));
+      }
+
       // 节流：100ms 内只刷新一次事件列表和 petState，减少高频事件时的渲染
       const now = Date.now();
       if (now - eventThrottleRef.current.lastFlush < 100) {
@@ -299,11 +321,11 @@ function useCompanion() {
     setActivePermissions(prev => prev.filter(p => p.id !== id));
   }
 
-  return { settings, updateSettings, connection, events, currentEvent, petState, toolStreams, activePermissions, respondToPermission };
+  return { settings, updateSettings, connection, events, currentEvent, petState, toolStreams, activePermissions, sessions, respondToPermission };
 }
 
 function PetApp() {
-  const { settings, updateSettings, currentEvent, petState, toolStreams, activePermissions, respondToPermission } = useCompanion();
+  const { settings, updateSettings, currentEvent, petState, toolStreams, activePermissions, sessions, connection, respondToPermission } = useCompanion();
   const editMode = settings.editPosition;
   const dragging = useRef<string | null>(null);
   const dragStart = useRef<{ mx: number; my: number; ox: number; oy: number }>({ mx: 0, my: 0, ox: 0, oy: 0 });
@@ -624,6 +646,15 @@ function PetApp() {
         {settings.showBubbles && toolStreams.length > 0 ? (
           <ToolStreams streams={toolStreams} offset={offsets.ribbon} />
         ) : null}
+        {settings.multiSessionEnabled && sessions.filter(s => s.isActive && s.sessionId !== connection.activeSessionId).slice(0, 3).map((session, i) => (
+          <CompanionClawd
+            key={session.sessionId}
+            session={session}
+            index={i}
+            settings={settings}
+            showTitle={settings.showSessionTitle}
+          />
+        ))}
       </section>
     </main>
   );
@@ -836,6 +867,28 @@ function ClawdSprite({ state, idleBubble, eventType, stateAnimations }: { state:
   }
   const spriteState = state === "tool_mcp" ? "thinking" : state === "tool_read" ? "thinking" : state === "tool_bash" ? "tool_read" : state;
   return <span className={`clawd-sprite clawd-sprite-${spriteState} clawd-gif-${clawdGifName[state]}`} aria-hidden="true" />;
+}
+
+function CompanionClawd({ session, index, settings, showTitle }: { session: CompanionSession; index: number; settings: CompanionSettings; showTitle: boolean }) {
+  const scale = settings.companionScale ?? 0.6;
+  // 默认在大 Clawd 上方，垂直排列
+  const offsetY = -(index + 1) * (120 * scale + 20);
+  const offsetX = 20 + index * 10;
+
+  return (
+    <div
+      className={`companion-clawd companion-enter companion-state-${session.state}`}
+      style={{
+        transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})`,
+        opacity: 1
+      }}
+    >
+      {showTitle && session.title && (
+        <div className="companion-title">{session.title}</div>
+      )}
+      <ClawdSprite state={session.state} stateAnimations={settings.stateAnimations} />
+    </div>
+  );
 }
 
 function StateProp({ state }: { state: PetState }) {
@@ -1076,6 +1129,15 @@ function SettingsApp() {
           <Slider label="气泡停留" min={3} max={18} step={1} value={settings.bubbleDuration} format={value => `${value} 秒`} onChange={bubbleDuration => updateSettings({ bubbleDuration })} />
           <Slider label="工具流停留" min={0.3} max={3} step={0.1} value={settings.toolStreamMinDuration} format={value => `${value.toFixed(1)} 秒`} onChange={toolStreamMinDuration => updateSettings({ toolStreamMinDuration })} />
           <Slider label="事件历史" min={12} max={100} step={4} value={settings.eventHistoryLimit} format={value => `${value} 条`} onChange={eventHistoryLimit => updateSettings({ eventHistoryLimit })} />
+          <div className="panel-divider" />
+          <h3 className="panel-subtitle">多会话模式</h3>
+          <Toggle label="启用多会话" checked={settings.multiSessionEnabled} onChange={multiSessionEnabled => updateSettings({ multiSessionEnabled })} />
+          {settings.multiSessionEnabled && (
+            <>
+              <Toggle label="显示会话标题" checked={settings.showSessionTitle} onChange={showSessionTitle => updateSettings({ showSessionTitle })} />
+              <Slider label="小 Clawd 缩放" min={0.3} max={0.8} step={0.05} value={settings.companionScale} format={value => `${Math.round(value * 100)}%`} onChange={companionScale => updateSettings({ companionScale })} />
+            </>
+          )}
         </Panel>
 
         <Panel title="运行统计" icon={<Gauge size={18} />} wide>
