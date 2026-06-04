@@ -855,6 +855,7 @@ function SettingsApp() {
   const [copied, setCopied] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState("overview");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [advancedTab, setAdvancedTab] = useState("privacy");
   const [now, setNow] = useState(Date.now());
   const [appVersion, setAppVersion] = useState("...");
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({
@@ -867,6 +868,10 @@ function SettingsApp() {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [previewIdleBubble, setPreviewIdleBubble] = useState<string | null>(null);
   const [persistedStats, setPersistedStats] = useState<any>(null);
+  const [onboardingDone, setOnboardingDone] = useState(() => {
+    try { return localStorage.getItem("clawd-onboarding-done") === "1"; } catch { return true; }
+  });
+  const [onboardingStep, setOnboardingStep] = useState(0);
   const hookCommand = "node D:/build/GitLocal/Clawd-Companion/dist/hook-forwarder/index.js";
   const hookConfigPath = "C:/Users/Doulor/.claude/settings.json";
   const hookSnippet = useMemo(() => buildHookSnippet(hookCommand), [hookCommand]);
@@ -971,6 +976,51 @@ function SettingsApp() {
         <div className="mini-stage"><div className="mini-pet"><Clawd key={previewIdleBubble ?? "idle"} state={petState} settings={settings} forceIdleBubble={previewIdleBubble} /></div></div>
       </section>
 
+      {!onboardingDone && (
+        <section className="onboarding-card">
+          <div className="onboarding-steps">
+            {["欢迎", "连接", "完成"].map((label, i) => (
+              <div key={label} className={`onboarding-step ${i === onboardingStep ? "active" : i < onboardingStep ? "done" : ""}`}>
+                <span className="onboarding-step-num">{i + 1}</span>
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
+          <div className="onboarding-content">
+            {onboardingStep === 0 && (
+              <>
+                <h3>欢迎使用 Clawd Companion</h3>
+                <p>Clawd 是 Claude Code 的桌面宠物伴侣，会在你使用 Claude Code 时实时显示工具调用、会话状态和动画反馈。</p>
+                <p className="note">接下来只需 2 步即可开始使用。</p>
+              </>
+            )}
+            {onboardingStep === 1 && (
+              <>
+                <h3>连接 Claude Code</h3>
+                <p>点击下方按钮，Clawd 会自动配置 Claude Code 的 hooks，让 Claude Code 把事件发送给 Clawd。</p>
+                <div className="hooks-manager" style={{ marginTop: 12 }}>
+                  <HooksManager />
+                </div>
+              </>
+            )}
+            {onboardingStep === 2 && (
+              <>
+                <h3>一切就绪</h3>
+                <p>打开任意 Claude Code 会话，Clawd 会自动跟随。你可以在配置面板中调整桌宠外观、动画和行为。</p>
+                <p className="note">点击下方按钮开始使用。</p>
+              </>
+            )}
+          </div>
+          <div className="onboarding-actions">
+            {onboardingStep > 0 && <button className="ghost" onClick={() => setOnboardingStep(onboardingStep - 1)}>上一步</button>}
+            <button onClick={() => {
+              if (onboardingStep < 2) setOnboardingStep(onboardingStep + 1);
+              else { localStorage.setItem("clawd-onboarding-done", "1"); setOnboardingDone(true); }
+            }}>{onboardingStep < 2 ? "下一步" : "开始使用"}</button>
+          </div>
+        </section>
+      )}
+
       <section className="status-strip">
         <StatusCard icon={<Radio size={18} />} label="连接状态" value={connection.connected ? "已连接" : connection.serverListening ? "等待会话" : "未监听"} meta={connection.activeClientLabel} tone={connection.connected ? "good" : connection.serverListening ? "wait" : "bad"} />
         <StatusCard icon={<Timer size={18} />} label="最近事件" value={connection.lastEventAt ? timeAgo(connection.lastEventAt, now) : "还没收到"} tone={connection.lastEventAt ? "good" : "wait"} />
@@ -981,37 +1031,42 @@ function SettingsApp() {
       {connection.error ? <section className="connection-error"><Wrench size={18} />{connection.error}</section> : null}
 
       <section className="content-grid">
-        <Panel id="connect" title="Claude Code 连接" icon={<PlugZap size={18} />} wide>
-          <HooksManager />
-          <div className="panel-divider" />
-          <div className="connection-detail-grid">
-            <ConnectionDetail label="状态" value={connection.connected ? "已连接" : connection.serverListening ? "等待 Claude 会话" : "本地服务未监听"} />
-            <ConnectionDetail label="客户端" value={connection.activeClientLabel ?? "未知客户端"} />
-            <ConnectionDetail label="会话 ID" value={shortSession(connection.activeSessionId)} />
-            <ConnectionDetail label="最后活动" value={connection.lastEventAt ? timeAgo(connection.lastEventAt, now) : "暂无"} />
-          </div>
-          <div className="command-row">
-            <span>Hook forwarder 命令</span>
-            <code>{hookCommand}</code>
-            <button onClick={() => copy(hookCommand, "cmd")}><Clipboard size={15} />{copied === "cmd" ? "已复制" : "复制"}</button>
-          </div>
-        </Panel>
+        {onboardingDone && (
+          <Panel id="connect" title="Claude Code 连接" icon={<PlugZap size={18} />} wide>
+            <HooksManager />
+            <div className="panel-divider" />
+            <div className="connection-detail-grid">
+              <ConnectionDetail label="状态" value={connection.connected ? "已连接" : connection.serverListening ? "等待 Claude 会话" : "本地服务未监听"} />
+              <ConnectionDetail label="客户端" value={connection.activeClientLabel ?? "未知客户端"} />
+              <ConnectionDetail label="会话 ID" value={shortSession(connection.activeSessionId)} />
+              <ConnectionDetail label="最后活动" value={connection.lastEventAt ? timeAgo(connection.lastEventAt, now) : "暂无"} />
+            </div>
+          </Panel>
+        )}
 
         <Panel id="appearance" title="桌宠外观" icon={<Bot size={18} />} wide>
-          <Toggle label="启用桌宠" checked={settings.petEnabled} onChange={petEnabled => updateSettings({ petEnabled })} />
-          <Toggle label="始终置顶" checked={settings.alwaysOnTop} onChange={alwaysOnTop => updateSettings({ alwaysOnTop })} />
-          <Toggle label="完全点击穿透" checked={settings.clickThrough} onChange={clickThrough => updateSettings({ clickThrough })} />
-          <Toggle label="显示气泡" checked={settings.showBubbles} onChange={showBubbles => updateSettings({ showBubbles })} />
-          <Toggle label="显示状态图标" checked={settings.showStatusProp} onChange={showStatusProp => updateSettings({ showStatusProp })} />
-          <Toggle label="编辑桌宠位置" checked={settings.editPosition} onChange={editPosition => updateSettings({ editPosition })} />
-          {settings.editPosition ? <button className="inline-action" onClick={() => updateSettings({ positionOffsets: defaultSettings.positionOffsets, zoneSizes: defaultSettings.zoneSizes, clawdScale: defaultSettings.clawdScale, thoughtScale: defaultSettings.thoughtScale, bubbleScale: defaultSettings.bubbleScale, cardScale: defaultSettings.cardScale, petScale: defaultSettings.petScale, viewScale: defaultSettings.viewScale })}>重置全部</button> : null}
-          <Slider label="整体尺寸" min={0.7} max={1.45} step={0.05} value={settings.petScale} format={value => `${Math.round(value * 100)}%`} onChange={petScale => updateSettings({ petScale })} />
-          <Slider label="Clawd尺寸" min={0.7} max={1.35} step={0.05} value={settings.clawdScale} format={value => `${Math.round(value * 100)}%`} onChange={clawdScale => updateSettings({ clawdScale })} />
-          <Slider label="Clawd透明" min={0.45} max={1} step={0.05} value={settings.clawdOpacity} format={value => `${Math.round(value * 100)}%`} onChange={clawdOpacity => updateSettings({ clawdOpacity })} />
-          <Slider label="思维泡尺寸" min={0.75} max={1.35} step={0.05} value={settings.thoughtScale} format={value => `${Math.round(value * 100)}%`} onChange={thoughtScale => updateSettings({ thoughtScale })} />
-          <Slider label="思维泡透明" min={0.45} max={1} step={0.05} value={settings.thoughtOpacity} format={value => `${Math.round(value * 100)}%`} onChange={thoughtOpacity => updateSettings({ thoughtOpacity })} />
-          <Slider label="卡片尺寸" min={0.75} max={1.25} step={0.05} value={settings.cardScale} format={value => `${Math.round(value * 100)}%`} onChange={cardScale => updateSettings({ cardScale })} />
-          <Slider label="卡片透明" min={0.45} max={1} step={0.05} value={settings.cardOpacity} format={value => `${Math.round(value * 100)}%`} onChange={cardOpacity => updateSettings({ cardOpacity })} />
+          <div className="settings-columns">
+            <section className="settings-group">
+              <h3 className="panel-subtitle">显示</h3>
+              <Toggle label="启用桌宠" checked={settings.petEnabled} onChange={petEnabled => updateSettings({ petEnabled })} />
+              <Toggle label="始终置顶" checked={settings.alwaysOnTop} onChange={alwaysOnTop => updateSettings({ alwaysOnTop })} />
+              <Toggle label="完全点击穿透" checked={settings.clickThrough} onChange={clickThrough => updateSettings({ clickThrough })} />
+              <Toggle label="显示气泡" checked={settings.showBubbles} onChange={showBubbles => updateSettings({ showBubbles })} />
+              <Toggle label="显示状态图标" checked={settings.showStatusProp} onChange={showStatusProp => updateSettings({ showStatusProp })} />
+              <Toggle label="编辑桌宠位置" checked={settings.editPosition} onChange={editPosition => updateSettings({ editPosition })} />
+              {settings.editPosition ? <button className="inline-action" onClick={() => updateSettings({ positionOffsets: defaultSettings.positionOffsets, zoneSizes: defaultSettings.zoneSizes, clawdScale: defaultSettings.clawdScale, thoughtScale: defaultSettings.thoughtScale, bubbleScale: defaultSettings.bubbleScale, cardScale: defaultSettings.cardScale, petScale: defaultSettings.petScale, viewScale: defaultSettings.viewScale })}>重置全部</button> : null}
+            </section>
+            <section className="settings-group">
+              <h3 className="panel-subtitle">尺寸与透明度</h3>
+              <Slider label="整体尺寸" min={0.7} max={1.45} step={0.05} value={settings.petScale} format={value => `${Math.round(value * 100)}%`} onChange={petScale => updateSettings({ petScale })} />
+              <Slider label="Clawd尺寸" min={0.7} max={1.35} step={0.05} value={settings.clawdScale} format={value => `${Math.round(value * 100)}%`} onChange={clawdScale => updateSettings({ clawdScale })} />
+              <Slider label="Clawd透明" min={0.45} max={1} step={0.05} value={settings.clawdOpacity} format={value => `${Math.round(value * 100)}%`} onChange={clawdOpacity => updateSettings({ clawdOpacity })} />
+              <Slider label="思维泡尺寸" min={0.75} max={1.35} step={0.05} value={settings.thoughtScale} format={value => `${Math.round(value * 100)}%`} onChange={thoughtScale => updateSettings({ thoughtScale })} />
+              <Slider label="思维泡透明" min={0.45} max={1} step={0.05} value={settings.thoughtOpacity} format={value => `${Math.round(value * 100)}%`} onChange={thoughtOpacity => updateSettings({ thoughtOpacity })} />
+              <Slider label="卡片尺寸" min={0.75} max={1.25} step={0.05} value={settings.cardScale} format={value => `${Math.round(value * 100)}%`} onChange={cardScale => updateSettings({ cardScale })} />
+              <Slider label="卡片透明" min={0.45} max={1} step={0.05} value={settings.cardOpacity} format={value => `${Math.round(value * 100)}%`} onChange={cardOpacity => updateSettings({ cardOpacity })} />
+            </section>
+          </div>
         </Panel>
 
         <Panel title="应用行为" icon={<MousePointer2 size={18} />}>
@@ -1030,73 +1085,115 @@ function SettingsApp() {
         </Panel>
 
         {showAdvanced && (
-          <Panel id="privacy" title="隐私和端口" icon={<Shield size={18} />}>
-            <Field label="事件端口">
-              <input value={settings.port} onChange={event => updateSettings({ port: Number(event.target.value) || defaultSettings.port })} />
-            </Field>
-            <Field label="本地 token">
-              <input value={settings.token} onChange={event => updateSettings({ token: event.target.value })} />
-            </Field>
-            <Segmented value={settings.privacyMode} onChange={privacyMode => updateSettings({ privacyMode })} />
-            <p className="note">安全模式只显示工具类型；标准模式显示文件名和搜索模式；详细模式可显示被截断的命令摘要，但仍不会展示完整 prompt 或命令输出。</p>
-          </Panel>
-        )}
-
-        {showAdvanced && (
-          <Panel title="测试事件" icon={<Play size={18} />}>
-            <div className="test-grid">
-              {sampleEvents.map(event => <button key={`${event.event}-${event.tool ?? "x"}`} onClick={() => test(event)}>{event.title}</button>)}
-              <button onClick={() => window.companion.triggerIdleBubble()}>
-                待机动画
-              </button>
+          <Panel id="privacy" title="高级设置" icon={<Shield size={18} />} wide>
+            <div className="advanced-tabs">
+              {[
+                ["privacy", "隐私端口"],
+                ["idle", "待机动画"],
+                ["mapping", "动作映射"],
+                ["test", "测试事件"],
+                ["config", "配置管理"],
+                ["data", "数据管理"]
+              ].map(([key, label]) => (
+                <button key={key} className={advancedTab === key ? "active" : ""} onClick={() => setAdvancedTab(key)}>{label}</button>
+              ))}
             </div>
-          </Panel>
-        )}
-
-        {showAdvanced && (
-          <Panel title="待机动画设置" icon={<Sparkles size={18} />} wide>
-            <IdleAnimSettings
-              config={settings.idleAnim ?? defaultSettings.idleAnim!}
-              onChange={cfg => updateSettings({ idleAnim: cfg })}
-            />
-          </Panel>
-        )}
-
-        {showAdvanced && (
-          <Panel title="动作动画映射" icon={<Bot size={18} />} wide>
-            <StateAnimSettings
-              stateAnimations={settings.stateAnimations ?? {}}
-              onChange={sa => updateSettings({ stateAnimations: sa })}
-            />
-          </Panel>
-        )}
-
-        {showAdvanced && (
-          <Panel title="配置管理" icon={<FileText size={18} />}>
-            <div className="command-row" style={{ marginBottom: 8 }}>
-              <span>导出当前配置</span>
-              <button onClick={async () => {
-                const json = await window.companion.exportSettings();
-                await navigator.clipboard.writeText(json);
-                setCopied("export");
-                setTimeout(() => setCopied(null), 1600);
-              }}><Clipboard size={15} />{copied === "export" ? "已复制" : "复制到剪贴板"}</button>
+            <div className="advanced-content">
+              {advancedTab === "privacy" && (
+                <div className="settings-columns compact">
+                  <section className="settings-group">
+                    <Field label="事件端口">
+                      <input value={settings.port} onChange={event => updateSettings({ port: Number(event.target.value) || defaultSettings.port })} />
+                    </Field>
+                    <Field label="本地 token">
+                      <input value={settings.token} onChange={event => updateSettings({ token: event.target.value })} />
+                    </Field>
+                  </section>
+                  <section className="settings-group">
+                    <Segmented value={settings.privacyMode} onChange={privacyMode => updateSettings({ privacyMode })} />
+                    <p className="note">安全模式只显示工具类型；标准模式显示文件名和搜索模式；详细模式可显示被截断的命令摘要。</p>
+                  </section>
+                </div>
+              )}
+              {advancedTab === "idle" && (
+                <IdleAnimSettings config={settings.idleAnim ?? defaultSettings.idleAnim!} onChange={cfg => updateSettings({ idleAnim: cfg })} />
+              )}
+              {advancedTab === "mapping" && (
+                <StateAnimSettings stateAnimations={settings.stateAnimations ?? {}} onChange={sa => updateSettings({ stateAnimations: sa })} />
+              )}
+              {advancedTab === "test" && (
+                <div className="test-grid">
+                  {sampleEvents.map(event => <button key={`${event.event}-${event.tool ?? "x"}`} onClick={() => test(event)}>{event.title}</button>)}
+                  <button onClick={() => window.companion.triggerIdleBubble()}>待机动画</button>
+                </div>
+              )}
+              {advancedTab === "config" && (
+                <div className="settings-columns compact">
+                  <section className="settings-group">
+                    <div className="command-row compact">
+                      <span>导出当前配置</span>
+                      <button onClick={async () => {
+                        const result = await window.companion.exportSettingsFile();
+                        if (result.ok) {
+                          setCopied("export-file");
+                          setTimeout(() => setCopied(null), 2000);
+                        }
+                      }}><FileText size={15} />{copied === "export-file" ? "已导出" : "保存到文件"}</button>
+                    </div>
+                  </section>
+                  <section className="settings-group">
+                    <div className="command-row compact">
+                      <span>导入配置</span>
+                      <button onClick={async () => {
+                        const result = await window.companion.importSettingsFile();
+                        setCopied(result.ok ? "import-file-ok" : result.error ? "import-file-fail" : "");
+                        if (result.ok) window.location.reload();
+                        setTimeout(() => setCopied(null), 2000);
+                      }}><FileText size={15} />{copied === "import-file-ok" ? "已导入" : copied === "import-file-fail" ? "失败" : "从文件导入"}</button>
+                    </div>
+                    <p className="note">从 JSON 文件导入配置，会覆盖当前设置。</p>
+                  </section>
+                </div>
+              )}
+              {advancedTab === "data" && (
+                <div className="settings-columns compact">
+                  <section className="settings-group">
+                    <div className="command-row compact">
+                      <span>导出统计数据</span>
+                      <button onClick={async () => {
+                        const result = await window.companion.exportStatsFile();
+                        if (result.ok) setCopied("stats-export");
+                        setTimeout(() => setCopied(null), 2000);
+                      }}><FileText size={15} />{copied === "stats-export" ? "已导出" : "保存到文件"}</button>
+                    </div>
+                  </section>
+                  <section className="settings-group">
+                    <div className="command-row compact">
+                      <span>导入统计数据</span>
+                      <button onClick={async () => {
+                        const result = await window.companion.importStatsFile();
+                        if (result.ok) window.location.reload();
+                        setCopied(result.ok ? "stats-import-ok" : "stats-import-fail");
+                        setTimeout(() => setCopied(null), 2000);
+                      }}><FileText size={15} />{copied === "stats-import-ok" ? "已导入" : copied === "stats-import-fail" ? "失败" : "从文件导入"}</button>
+                    </div>
+                    <p className="note">从 JSON 文件导入统计数据，会覆盖当前数据。</p>
+                  </section>
+                  <section className="settings-group" style={{ gridColumn: "1 / -1" }}>
+                    <div className="command-row compact">
+                      <span>清空统计数据</span>
+                      <button className="danger" onClick={async () => {
+                        if (confirm("确定要清空所有统计数据吗？此操作不可恢复。")) {
+                          await window.companion.resetStats();
+                          window.location.reload();
+                        }
+                      }}><X size={15} />清空</button>
+                    </div>
+                    <p className="note">永久删除所有累计统计数据，此操作不可恢复。</p>
+                  </section>
+                </div>
+              )}
             </div>
-            <div className="command-row">
-              <span>导入配置</span>
-              <button onClick={async () => {
-                const text = await navigator.clipboard.readText();
-                const result = await window.companion.importSettings(text);
-                if (result.ok) {
-                  // saveSettings 会自动广播 com panion:settings，useCompanion 会自动更新
-                  setCopied("import-ok");
-                } else {
-                  setCopied("import-fail");
-                }
-                setTimeout(() => setCopied(null), 2000);
-              }}><FileText size={15} />{copied === "import-ok" ? "导入成功" : copied === "import-fail" ? "导入失败" : "从剪贴板导入"}</button>
-            </div>
-            <p className="note">导出会将全部设置复制到剪贴板（JSON 格式）。导入会覆盖当前设置。</p>
           </Panel>
         )}
 
@@ -1595,16 +1692,6 @@ function StatsPanel({ stats }: { stats: any }) {
           </div>
         </>
       )}
-      <div className="panel-divider" />
-      <details className="stats-danger-zone">
-        <summary>数据管理</summary>
-        <button className="inline-action danger" onClick={async () => {
-          if (confirm("确定要清空所有统计数据吗？此操作不可恢复。")) {
-            await window.companion.resetStats();
-            window.location.reload();
-          }
-        }}>清空统计数据</button>
-      </details>
     </div>
   );
 }

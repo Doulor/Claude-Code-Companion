@@ -44,10 +44,12 @@ declare global {
       syncIdleBubble: (sprite: string | null) => Promise<void>;
       onIdleBubbleSync: (callback: (sprite: string | null) => void) => () => void;
       openExternal: (url: string) => Promise<void>;
-      exportSettings: () => Promise<string>;
-      importSettings: (json: string) => Promise<{ ok: boolean; error?: string }>;
       getStats: () => Promise<import("../shared/events").AppStats>;
       resetStats: () => Promise<void>;
+      exportSettingsFile: () => Promise<{ ok: boolean; error?: string }>;
+      importSettingsFile: () => Promise<{ ok: boolean; error?: string }>;
+      exportStatsFile: () => Promise<{ ok: boolean; error?: string }>;
+      importStatsFile: () => Promise<{ ok: boolean; error?: string }>;
       onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
     };
   }

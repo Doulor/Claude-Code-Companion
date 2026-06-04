@@ -886,17 +886,62 @@ ipcMain.handle("idle-bubble:sync", (_, sprite: string | null) => {
 ipcMain.handle("open-external", (_, url: string) => {
   shell.openExternal(url);
 });
-ipcMain.handle("settings:export", () => {
-  return JSON.stringify(settings, null, 2);
-});
-ipcMain.handle("settings:import", (_, json: string) => {
-  try {
-    const imported = JSON.parse(json) as Partial<CompanionSettings>;
-    saveSettings(imported);
+ipcMain.handle("settings:export-file", async () => {
+  const result = await require("electron").dialog.showSaveDialog({
+    defaultPath: "clawd-settings.json",
+    filters: [{ name: "JSON", extensions: ["json"] }]
+  });
+  if (!result.canceled && result.filePath) {
+    writeFileSync(result.filePath, JSON.stringify(settings, null, 2));
     return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
+  return { ok: false };
+});
+ipcMain.handle("settings:import-file", async () => {
+  const result = await require("electron").dialog.showOpenDialog({
+    filters: [{ name: "JSON", extensions: ["json"] }],
+    properties: ["openFile"]
+  });
+  if (!result.canceled && result.filePaths.length > 0) {
+    try {
+      const json = readFileSync(result.filePaths[0], "utf8");
+      const imported = JSON.parse(json) as Partial<CompanionSettings>;
+      saveSettings(imported);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+  return { ok: false };
+});
+ipcMain.handle("stats:export-file", async () => {
+  const result = await require("electron").dialog.showSaveDialog({
+    defaultPath: "clawd-stats.json",
+    filters: [{ name: "JSON", extensions: ["json"] }]
+  });
+  if (!result.canceled && result.filePath) {
+    writeFileSync(result.filePath, JSON.stringify(appStats, null, 2));
+    return { ok: true };
+  }
+  return { ok: false };
+});
+ipcMain.handle("stats:import-file", async () => {
+  const result = await require("electron").dialog.showOpenDialog({
+    filters: [{ name: "JSON", extensions: ["json"] }],
+    properties: ["openFile"]
+  });
+  if (!result.canceled && result.filePaths.length > 0) {
+    try {
+      const json = readFileSync(result.filePaths[0], "utf8");
+      const imported = JSON.parse(json) as Partial<AppStats>;
+      appStats = { ...defaultStats, ...imported, hourlyActivity: imported.hourlyActivity ?? new Array(24).fill(0) };
+      saveStats();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+  return { ok: false };
 });
 ipcMain.handle("test:idle-bubble", () => {
   petWindow?.webContents.send("companion:test-idle-bubble");
