@@ -405,8 +405,9 @@ function PetApp() {
     const cfg = settings.idleAnim;
     const mainIdle = (settings as any).mainClawdIdleAnimation ?? "random";
     const hasActiveSession = sessions.some(s => s.isActive);
-    // 固定动画模式：仅在有会话进行时播放指定的 GIF，替代静态 PNG
-    if (mainIdle !== "random" && hasActiveSession && !editMode) {
+    // 固定动画模式：仅在有会话且无工具调用时播放指定的 GIF
+    const isToolState = petState.startsWith("tool_") || petState === "waiting_permission";
+    if (mainIdle !== "random" && hasActiveSession && !editMode && !isToolState) {
       setIdleBubbleSprite(mainIdle);
       idleTimers.current.forEach(clearTimeout);
       idleTimers.current = [];
@@ -734,7 +735,7 @@ function PetApp() {
         {(() => {
           if (!settings.multiSessionEnabled || !mainSessionId) return null;
           const companions = sessions
-            .filter(s => s.sessionId !== mainSessionId && (s.isActive || exitingSessions.has(s.sessionId)) && s.eventCount >= 2)
+            .filter(s => s.sessionId !== mainSessionId && (s.isActive || exitingSessions.has(s.sessionId)))
             .slice(0, 3);
           if (companions.length === 0) return null;
           return companions.map((session, i) => (
