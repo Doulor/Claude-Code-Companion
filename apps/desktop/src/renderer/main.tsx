@@ -642,19 +642,25 @@ function PetApp() {
             <span className="edit-zone-label">权限卡片</span>
             <span className="zone-resize" onMouseDown={e => beginResize("permission", e)} />
           </div>
-          {settings.multiSessionEnabled && [0, 1, 2].map(i => (
-            <div key={i} className="edit-zone edit-zone-companion"
-              style={{
-                left: Math.round((226 - cw) / 2) + 100 + i * 60,
-                top: -80 - i * 60,
-                transform: `translate(${offsets.companion?.x ?? 0}px, ${offsets.companion?.y ?? 0}px)`,
-                width: Math.round(168 * (settings.companionScale ?? 0.6)),
-                height: Math.round(120 * (settings.companionScale ?? 0.6))
-              }}
-              onMouseDown={e => begin("companion", e)}>
-              <span className="edit-zone-label">小 Clawd {i + 1}</span>
-            </div>
-          ))}
+          {settings.multiSessionEnabled && [0, 1, 2].map(i => {
+            const companionOff = settings.positionOffsets?.companion ?? { x: 80, y: -120 };
+            const cScale = settings.companionScale ?? 0.6;
+            const cx = (offsets.clawd?.x ?? 0) + companionOff.x + i * 100;
+            const cy = (offsets.clawd?.y ?? 0) + companionOff.y - i * 80;
+            return (
+              <div key={i} className="edit-zone edit-zone-companion"
+                style={{
+                  left: 0,
+                  bottom: 0,
+                  transform: `translate(${cx}px, ${cy}px) scale(${cScale})`,
+                  width: 168,
+                  height: 160
+                }}
+                onMouseDown={e => begin("companion", e)}>
+                <span className="edit-zone-label">小 Clawd {i + 1}</span>
+              </div>
+            );
+          })}
         </section>
       </main>
     );
@@ -931,7 +937,6 @@ function CompanionClawd({ session, index, settings, showTitle, exiting, mainClaw
       className="companion-clawd"
       style={{
         transform: `translate(${baseX}px, ${baseY}px) scale(${scale})`,
-        border: "3px solid red",
         opacity: exiting ? 0 : 1,
         transition: exiting ? "opacity 0.6s ease-out" : "none"
       }}
