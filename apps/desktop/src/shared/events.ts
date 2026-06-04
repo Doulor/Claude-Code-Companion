@@ -137,6 +137,7 @@ export interface CompanionSettings {
   multiSessionEnabled: boolean;
   showSessionTitle: boolean;
   companionScale: number;
+  companionIdleAnimations: string[];
   launchAtLogin: boolean;
   openSettingsOnStart: boolean;
   doneSound: boolean;
@@ -238,6 +239,7 @@ export const defaultSettings: CompanionSettings = {
   multiSessionEnabled: false,
   showSessionTitle: true,
   companionScale: 0.6,
+  companionIdleAnimations: ["thinking", "idle", "waiting_permission"],
   launchAtLogin: false,
   openSettingsOnStart: true,
   doneSound: false,

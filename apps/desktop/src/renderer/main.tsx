@@ -187,21 +187,18 @@ function useCompanion() {
           setMainSessionId(sid);
         }
         let title = existing?.title ?? "";
-        if (!title) {
-          // 优先用 clientLabel（如 "Claude Code"），其次 prompt_submit 的 message，最后 sessionId
-          if (event.clientLabel) {
-            title = event.clientLabel;
-          } else if (event.event === "prompt_submit" && event.message) {
-            title = event.message.length > 20 ? event.message.slice(0, 20) + "…" : event.message;
-          } else if (event.event === "tool_start" && event.tool) {
-            title = `${event.tool}`;
-          } else if (event.event === "session_start") {
-            title = event.title || "会话";
-          }
+        // 标题提取逻辑：detail > title > message > clientLabel
+        const raw = event.detail || event.title || event.message || "";
+        const clean = raw.length > 25 ? raw.slice(0, 25) + "…" : raw;
+        if (!title && clean) {
+          title = clean;
         }
-        // 允许后续 prompt_submit 更新标题（用户输入是最具代表性的内容）
-        if (event.event === "prompt_submit" && event.message) {
-          title = event.message.length > 25 ? event.message.slice(0, 25) + "…" : event.message;
+        // 每次 prompt_submit 都更新标题（用户输入是最具代表性的内容）
+        if (event.event === "prompt_submit") {
+          const prompt = event.detail || event.message || "";
+          if (prompt) {
+            title = prompt.length > 25 ? prompt.slice(0, 25) + "…" : prompt;
+          }
         }
         const wasActive = existing?.isActive ?? true;
         const session: CompanionSession = {
@@ -961,14 +958,21 @@ function CompanionClawd({ session, index, settings, showTitle, exiting, mainClaw
   const off = (offsets as any)[`companion${index}`] ?? { x: 80 + index * 100, y: -120 - index * 80 };
   const baseX = off.x;
   const baseY = off.y;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  // 工作时自定义待机动画逻辑
+  const isIdleInSession = session.state === "thinking" || session.state === "idle";
+  const idleAnim = settings.companionIdleAnimations?.[index] ?? "thinking";
+  const displayState = isIdleInSession && idleAnim ? (idleAnim as PetState) : session.state;
 
   return (
     <div
       className="companion-clawd"
       style={{
         transform: `translate(${baseX}px, ${baseY}px) scale(${scale})`,
-        opacity: exiting ? 0 : 1,
-        transition: exiting ? "opacity 0.6s ease-out" : "none"
+        opacity: exiting ? 0 : mounted ? 1 : 0,
+        transition: "opacity 0.5s ease-out, transform 0.3s ease-out"
       }}
     >
       {showTitle && (
@@ -977,7 +981,7 @@ function CompanionClawd({ session, index, settings, showTitle, exiting, mainClaw
           <span className="companion-title-text">{session.title || session.sessionId.slice(0, 8)}</span>
         </div>
       )}
-      <ClawdSprite state={session.state} stateAnimations={settings.stateAnimations} />
+      <ClawdSprite state={displayState} stateAnimations={settings.stateAnimations} />
     </div>
   );
 }
@@ -1227,6 +1231,29 @@ function SettingsApp() {
             <>
               <Toggle label="显示会话标题" checked={settings.showSessionTitle} onChange={showSessionTitle => updateSettings({ showSessionTitle })} />
               <Slider label="小 Clawd 缩放" min={0.3} max={0.8} step={0.05} value={settings.companionScale} format={value => `${Math.round(value * 100)}%`} onChange={companionScale => updateSettings({ companionScale })} />
+              <div className="panel-divider" />
+              <h3 className="panel-subtitle">工作时待机动画</h3>
+              <p className="note">有会话运行但没有工具调用时，小 Clawd 循环播放选中的动画。工具调用时仍会切换到对应动画。</p>
+              {[0, 1, 2].map(i => (
+                <div key={i} className="companion-idle-row">
+                  <span className="companion-idle-label">小 Clawd {i + 1}</span>
+                  <div className="companion-idle-options">
+                    {["thinking", "idle", "waiting_permission", "done"].map(sprite => (
+                      <button
+                        key={sprite}
+                        className={`companion-idle-btn ${(settings.companionIdleAnimations?.[i] ?? "thinking") === sprite ? "active" : ""}`}
+                        onClick={() => {
+                          const next = [...(settings.companionIdleAnimations ?? ["thinking", "thinking", "thinking"])];
+                          next[i] = sprite;
+                          updateSettings({ companionIdleAnimations: next });
+                        }}
+                      >
+                        {stateCopy[sprite as PetState]?.label ?? sprite}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </>
           )}
         </Panel>
