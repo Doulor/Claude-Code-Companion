@@ -18,6 +18,13 @@
 - 每次发布自动 patch 递增，除非用户明确指定
 - `latest.yml` 中的文件名必须与上传到 Release 的文件名完全一致
 
+## Release 文件命名规范
+
+- **上传到 GitHub Release 的文件**必须使用连字符格式：`Clawd-Companion-Setup-{版本号}.exe`
+- **electron-builder 生成的文件**使用空格格式：`Clawd Companion Setup {版本号}.exe`
+- **必须在构建后重命名**：exe 和 blockmap 文件都需要从空格格式改为连字符格式
+- **latest.yml** 中的文件名必须与重命名后的文件名完全一致
+
 ## 构建命令
 
 - `npm run build` — 编译 TypeScript + Vite 构建

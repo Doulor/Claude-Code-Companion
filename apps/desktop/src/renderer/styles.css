@@ -1243,13 +1243,19 @@ input[type="range"]:focus { box-shadow: none; }
   border-radius: 4px;
   font-family: "Cascadia Code", "Fira Code", monospace;
 }
-.update-hint {
+.update-hint-btn {
   font-size: 11px;
   color: var(--blue);
   background: rgba(59, 130, 246, 0.1);
+  border: none;
   padding: 3px 8px;
   border-radius: 4px;
+  cursor: pointer;
   animation: hint-pulse 2s ease-in-out infinite;
+  margin-left: 8px;
+}
+.update-hint-btn:hover {
+  background: rgba(59, 130, 246, 0.2);
 }
 @keyframes hint-pulse {
   0%, 100% { opacity: 0.7; }

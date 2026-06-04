@@ -423,14 +423,24 @@ function setupAutoUpdater() {
     if (!downloadedInstallerPath) {
       const fs = require("node:fs") as typeof import("node:fs");
       const path = require("node:path") as typeof import("node:path");
-      const cacheDir = path.join(app.getPath("userData"), "..", "Cache", "Clawd Companion", "pending");
-      try {
-        const files = fs.readdirSync(cacheDir)
-          .filter((f: string) => f.endsWith(".exe"))
-          .map((f: string) => ({ name: f, time: fs.statSync(path.join(cacheDir, f)).mtimeMs }))
-          .sort((a: any, b: any) => b.time - a.time);
-        if (files.length > 0) downloadedInstallerPath = path.join(cacheDir, files[0].name);
-      } catch {}
+      // 尝试多个可能的缓存目录
+      const possibleDirs = [
+        path.join(app.getPath("userData"), "..", "Cache", "Clawd Companion", "pending"),
+        path.join(app.getPath("userData"), "Cache", "pending"),
+        path.join(app.getPath("temp"), "Clawd Companion", "pending")
+      ];
+      for (const cacheDir of possibleDirs) {
+        try {
+          const files = fs.readdirSync(cacheDir)
+            .filter((f: string) => f.endsWith(".exe"))
+            .map((f: string) => ({ name: f, time: fs.statSync(path.join(cacheDir, f)).mtimeMs }))
+            .sort((a: any, b: any) => b.time - a.time);
+          if (files.length > 0) {
+            downloadedInstallerPath = path.join(cacheDir, files[0].name);
+            break;
+          }
+        } catch {}
+      }
     }
     updateStatus = { checking: false, available: true, upToDate: false, downloading: false, downloaded: true, version: info.version, progress: 100 };
     broadcastUpdateStatus();
