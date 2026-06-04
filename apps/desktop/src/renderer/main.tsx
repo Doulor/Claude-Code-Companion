@@ -928,11 +928,12 @@ function CompanionClawd({ session, index, settings, showTitle, exiting, mainClaw
 
   return (
     <div
-      className={`companion-clawd ${exiting ? "companion-exit" : "companion-enter"}`}
+      className="companion-clawd"
       style={{
         transform: `translate(${baseX}px, ${baseY}px) scale(${scale})`,
-        ["--companion-scale" as any]: scale,
-        outline: "2px solid red"
+        border: "3px solid red",
+        opacity: exiting ? 0 : 1,
+        transition: exiting ? "opacity 0.6s ease-out" : "none"
       }}
     >
       {showTitle && session.title && (
