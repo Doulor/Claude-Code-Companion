@@ -697,10 +697,10 @@ function normalizeCommandPath(pathLike: string): string {
 function getHookCommand(): string {
   const devPath = normalizeCommandPath(join(__dirname, "../../dist/hook-forwarder/index.js"));
   if (!app.isPackaged && existsSync(devPath)) {
-    return `node ${devPath}`;
+    return `node "${devPath}"`;
   }
   const prodPath = normalizeCommandPath(join(process.resourcesPath, "hook-forwarder/index.js"));
-  return `node ${prodPath}`;
+  return `node "${prodPath}"`;
 }
 
 function checkHooks(): HooksStatus {

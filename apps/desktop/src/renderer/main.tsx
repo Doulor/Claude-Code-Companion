@@ -1557,9 +1557,12 @@ function SettingsApp() {
           {updateStatus.error ? (
             <span className="update-error">{updateStatus.error}</span>
           ) : updateStatus.downloaded ? (
-            <button className="update-btn update-ready" onClick={handleInstallClick} disabled={installing}>
-              {installing ? "正在启动安装..." : `点击重启并安装 v${updateStatus.version}`}
-            </button>
+            <div className="update-install-wrap">
+              <button className="update-btn update-ready" onClick={handleInstallClick} disabled={installing}>
+                {installing ? "正在启动安装..." : `点击重启并安装 v${updateStatus.version}`}
+              </button>
+              <span className="update-install-hint">若安装失败，请右键本软件并以管理员身份运行后再次尝试</span>
+            </div>
           ) : updateStatus.downloading ? (
             <span className="update-progress">下载中 {Math.round(updateStatus.progress ?? 0)}%</span>
           ) : updateStatus.checking ? (
