@@ -46,6 +46,7 @@ let updateStatus: UpdateStatus = {
 let downloadedInstallerPath: string | undefined;
 let appStats: AppStats = { ...defaultStats };
 let appStartTime = Date.now();
+let sessionStartRuntime = 0; // 本次启动前已累计的运行时间
 
 function loadStats(): AppStats {
   ensureDataDir();
@@ -54,6 +55,8 @@ function loadStats(): AppStats {
   }
   try {
     const stored = JSON.parse(readFileSync(statsPath, "utf8")) as Partial<AppStats>;
+    // 保存上次的累计运行时间，用于本次启动后累加
+    sessionStartRuntime = stored.totalRuntime ?? 0;
     return { ...defaultStats, ...stored, hourlyActivity: stored.hourlyActivity ?? new Array(24).fill(0) };
   } catch {
     return { ...defaultStats, firstStartTime: Date.now() };
@@ -98,8 +101,8 @@ function trackEvent(event: CompanionEvent) {
   // 小时活跃度
   appStats.hourlyActivity[hour] = (appStats.hourlyActivity[hour] ?? 0) + 1;
 
-  // 运行时间
-  appStats.totalRuntime = now - appStartTime;
+  // 运行时间（累计所有启动的运行时间）
+  appStats.totalRuntime = sessionStartRuntime + (now - appStartTime);
 
   // 最后事件时间
   appStats.lastEventTime = now;
@@ -867,11 +870,24 @@ ipcMain.handle("update:check", async () => {
   }
 });
 ipcMain.handle("update:install", () => {
-  if (updateStatus.downloaded && downloadedInstallerPath) {
+  if (!updateStatus.downloaded) {
+    return { ok: false, error: "没有已下载的更新。" };
+  }
+  // 优先使用 electron-updater 的标准重启安装方式
+  try {
+    autoUpdater.quitAndInstall();
+    return { ok: true };
+  } catch {
+    // fallback：手动启动下载好的安装包
+  }
+  if (downloadedInstallerPath) {
     const { exec } = require("node:child_process");
     exec(`powershell -Command "Start-Process '${downloadedInstallerPath}' -Verb RunAs"`);
     setTimeout(() => app.quit(), 1500);
+    return { ok: true };
   }
+  logRuntime("update:install failed - downloadedInstallerPath is undefined");
+  return { ok: false, error: "找不到已下载的安装包路径，请尝试手动下载。" };
 });
 ipcMain.handle("update:get-status", () => updateStatus);
 ipcMain.handle("app:get-version", () => app.getVersion());
@@ -975,7 +991,7 @@ if (!gotSingleInstanceLock) {
   });
 
   app.on("before-quit", () => {
-    appStats.totalRuntime = Date.now() - appStartTime;
+    appStats.totalRuntime = sessionStartRuntime + (Date.now() - appStartTime);
     saveStats();
     wsServer?.close();
     eventServer?.close();
