@@ -179,6 +179,7 @@ function useCompanion() {
       // 多会话追踪
       const sid = event.sessionId;
       const isDone = event.event === "done" || event.event === "error";
+      console.log("[D-TRACK]", "event=" + event.event, "sid=" + sid?.slice?.(0, 8), "mapSize=" + sessionsRef.current.size, "mainSid=" + mainSessionId?.slice?.(0, 6));
 
       if (sid) {
         const existing = sessionsRef.current.get(sid);
@@ -407,7 +408,9 @@ function PetApp() {
     const hasActiveSession = sessions.some(s => s.isActive);
     // 固定动画模式：仅在有会话且无工具调用时播放指定的 GIF
     const isToolState = petState.startsWith("tool_") || petState === "waiting_permission";
+    console.log("[D-IDLE]", "mainIdle=" + mainIdle, "hasActiveSession=" + hasActiveSession, "isToolState=" + isToolState, "petState=" + petState, "enabled=" + cfg?.enabled, "editMode=" + editMode);
     if (mainIdle !== "random" && hasActiveSession && !editMode && !isToolState) {
+      console.log("[D-IDLE] FIXED: setting idleBubbleSprite to", mainIdle);
       setIdleBubbleSprite(mainIdle);
       idleTimers.current.forEach(clearTimeout);
       idleTimers.current = [];
@@ -415,11 +418,13 @@ function PetApp() {
     }
     // 随机动画模式：仅在 idle 状态且启用时播放
     if (!cfg?.enabled || petState !== "idle" || editMode) {
+      console.log("[D-IDLE] CLEAR: idleBubbleSprite=null");
       setIdleBubbleSprite(null);
       idleTimers.current.forEach(clearTimeout);
       idleTimers.current = [];
       return;
     }
+    console.log("[D-IDLE] RANDOM: starting random cycle");
     const pool = cfg.selectedSprites.length > 0 ? cfg.selectedSprites : ["idle"];
     function playBatch() {
       const sprite = pool[Math.floor(Math.random() * pool.length)];
@@ -733,10 +738,12 @@ function PetApp() {
           <ToolStreams streams={toolStreams} offset={offsets.ribbon} />
         ) : null}
         {(() => {
+          console.log("[D-COMPANION] multi=" + settings.multiSessionEnabled, "mainSid=" + mainSessionId?.slice?.(0, 6), "sessions=" + sessions.length, "exiting=" + exitingSessions.size, "sessions:", sessions.map(s => `${s.sessionId.slice(0, 6)} active=${s.isActive}`));
           if (!settings.multiSessionEnabled || !mainSessionId) return null;
           const companions = sessions
             .filter(s => s.sessionId !== mainSessionId && (s.isActive || exitingSessions.has(s.sessionId)))
             .slice(0, 3);
+          console.log("[D-COMPANION] companions=" + companions.length);
           if (companions.length === 0) return null;
           return companions.map((session, i) => (
             <CompanionClawd
