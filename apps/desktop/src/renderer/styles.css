@@ -1338,21 +1338,45 @@ input[type="range"]:focus { box-shadow: none; }
   pointer-events: none;
   z-index: 5;
 }
-.companion-title {
+.companion-badge {
   position: absolute;
-  top: -24px;
+  top: -30px;
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--ink);
-  background: rgba(255, 252, 244, 0.85);
-  padding: 2px 8px;
-  border-radius: 4px;
+  background: rgba(255, 252, 244, 0.92);
+  padding: 4px 10px;
+  border-radius: 6px;
   border: 1px solid var(--line);
+  box-shadow: 0 2px 8px rgba(43, 31, 21, 0.1);
   pointer-events: none;
   z-index: 10;
+}
+.companion-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.companion-status-idle { background: var(--muted); }
+.companion-status-thinking { background: var(--blue); }
+.companion-status-tool_read { background: var(--mint); }
+.companion-status-tool_edit { background: var(--coral); }
+.companion-status-tool_bash { background: var(--coral); }
+.companion-status-tool_search { background: var(--blue); }
+.companion-status-waiting_permission { background: var(--honey); }
+.companion-status-done { background: var(--mint); }
+.companion-status-error { background: var(--coral); }
+.companion-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
 }
 
 .state-anim-settings {

@@ -187,8 +187,21 @@ function useCompanion() {
           setMainSessionId(sid);
         }
         let title = existing?.title ?? "";
-        if (event.event === "prompt_submit" && !title) {
-          title = event.message.slice(0, 20) || sid.slice(0, 6);
+        if (!title) {
+          // 优先用 clientLabel（如 "Claude Code"），其次 prompt_submit 的 message，最后 sessionId
+          if (event.clientLabel) {
+            title = event.clientLabel;
+          } else if (event.event === "prompt_submit" && event.message) {
+            title = event.message.length > 20 ? event.message.slice(0, 20) + "…" : event.message;
+          } else if (event.event === "tool_start" && event.tool) {
+            title = `${event.tool}`;
+          } else if (event.event === "session_start") {
+            title = event.title || "会话";
+          }
+        }
+        // 允许后续 prompt_submit 更新标题（用户输入是最具代表性的内容）
+        if (event.event === "prompt_submit" && event.message) {
+          title = event.message.length > 25 ? event.message.slice(0, 25) + "…" : event.message;
         }
         const wasActive = existing?.isActive ?? true;
         const session: CompanionSession = {
@@ -958,8 +971,11 @@ function CompanionClawd({ session, index, settings, showTitle, exiting, mainClaw
         transition: exiting ? "opacity 0.6s ease-out" : "none"
       }}
     >
-      {showTitle && session.title && (
-        <div className="companion-title">{session.title}</div>
+      {showTitle && (
+        <div className="companion-badge">
+          <span className={`companion-status-dot companion-status-${session.state}`} />
+          <span className="companion-title-text">{session.title || session.sessionId.slice(0, 8)}</span>
+        </div>
       )}
       <ClawdSprite state={session.state} stateAnimations={settings.stateAnimations} />
     </div>
