@@ -43,6 +43,11 @@ declare global {
       onTriggerIdleBubble: (callback: () => void) => () => void;
       syncIdleBubble: (sprite: string | null) => Promise<void>;
       onIdleBubbleSync: (callback: (sprite: string | null) => void) => () => void;
+      openExternal: (url: string) => Promise<void>;
+      exportSettings: () => Promise<string>;
+      importSettings: (json: string) => Promise<{ ok: boolean; error?: string }>;
+      getStats: () => Promise<import("../shared/events").AppStats>;
+      resetStats: () => Promise<void>;
       onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
     };
   }

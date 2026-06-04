@@ -1,3 +1,33 @@
+export interface AppStats {
+  toolUsage: Record<string, number>;
+  eventTypeCounts: Record<string, number>;
+  totalSessions: number;
+  dailyStats: Record<string, { events: number; toolCalls: number; sessions: number }>;
+  errorCount: number;
+  permissionRequests: number;
+  permissionApproved: number;
+  permissionDenied: number;
+  totalRuntime: number;
+  hourlyActivity: number[];
+  firstStartTime: number;
+  lastEventTime: number;
+}
+
+export const defaultStats: AppStats = {
+  toolUsage: {},
+  eventTypeCounts: {},
+  totalSessions: 0,
+  dailyStats: {},
+  errorCount: 0,
+  permissionRequests: 0,
+  permissionApproved: 0,
+  permissionDenied: 0,
+  totalRuntime: 0,
+  hourlyActivity: new Array(24).fill(0),
+  firstStartTime: Date.now(),
+  lastEventTime: 0
+};
+
 export type ToolName =
   | "Read"
   | "Edit"

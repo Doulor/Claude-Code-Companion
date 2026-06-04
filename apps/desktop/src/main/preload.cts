@@ -64,6 +64,11 @@ contextBridge.exposeInMainWorld("companion", {
     ipcRenderer.on("companion:idle-bubble-sync", handler);
     return () => ipcRenderer.off("companion:idle-bubble-sync", handler);
   },
+  openExternal: (url: string) => ipcRenderer.invoke("open-external", url),
+  exportSettings: () => ipcRenderer.invoke("settings:export") as Promise<string>,
+  importSettings: (json: string) => ipcRenderer.invoke("settings:import", json) as Promise<{ ok: boolean; error?: string }>,
+  getStats: () => ipcRenderer.invoke("stats:get"),
+  resetStats: () => ipcRenderer.invoke("stats:reset"),
   onTriggerIdleBubble: (callback: () => void) => {
     const handler = () => callback();
     ipcRenderer.on("companion:test-idle-bubble", handler);
@@ -108,6 +113,11 @@ declare global {
       onTriggerIdleBubble: (callback: () => void) => () => void;
       syncIdleBubble: (sprite: string | null) => Promise<void>;
       onIdleBubbleSync: (callback: (sprite: string | null) => void) => () => void;
+      openExternal: (url: string) => Promise<void>;
+      exportSettings: () => Promise<string>;
+      importSettings: (json: string) => Promise<{ ok: boolean; error?: string }>;
+      getStats: () => Promise<import("../shared/events.js").AppStats>;
+      resetStats: () => Promise<void>;
       onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
     };
   }

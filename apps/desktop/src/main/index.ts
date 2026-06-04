@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, Notification, screen } from "electron";
+import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, Notification, screen, shell } from "electron";
 import electronUpdater from "electron-updater";
 const { autoUpdater } = electronUpdater;
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
@@ -7,8 +7,8 @@ import { appendFileSync, readFileSync, writeFileSync, existsSync, mkdirSync, cop
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { homedir } from "node:os";
-import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings, PermissionPollResult, PermissionResponse, UpdateStatus } from "../shared/events.js";
-import { defaultSettings } from "../shared/events.js";
+import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings, PermissionPollResult, PermissionResponse, UpdateStatus, AppStats } from "../shared/events.js";
+import { defaultSettings, defaultStats } from "../shared/events.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
@@ -17,6 +17,7 @@ const prodIconPath = join(process.resourcesPath, "build/icon.ico");
 const iconPath = existsSync(devIconPath) ? devIconPath : prodIconPath;
 const appDataDir = join(app.getPath("userData"), "clawd-companion");
 const settingsPath = join(appDataDir, "settings.json");
+const statsPath = join(appDataDir, "stats.json");
 const logPath = join(appDataDir, "runtime.log");
 
 let petWindow: BrowserWindow | null = null;
@@ -42,6 +43,74 @@ let updateStatus: UpdateStatus = {
   downloaded: false,
   downloading: false
 };
+let downloadedInstallerPath: string | undefined;
+let appStats: AppStats = { ...defaultStats };
+let appStartTime = Date.now();
+
+function loadStats(): AppStats {
+  ensureDataDir();
+  if (!existsSync(statsPath)) {
+    return { ...defaultStats, firstStartTime: Date.now() };
+  }
+  try {
+    const stored = JSON.parse(readFileSync(statsPath, "utf8")) as Partial<AppStats>;
+    return { ...defaultStats, ...stored, hourlyActivity: stored.hourlyActivity ?? new Array(24).fill(0) };
+  } catch {
+    return { ...defaultStats, firstStartTime: Date.now() };
+  }
+}
+
+function saveStats() {
+  ensureDataDir();
+  writeFileSync(statsPath, JSON.stringify(appStats, null, 2));
+}
+
+function trackEvent(event: CompanionEvent) {
+  const now = Date.now();
+  const today = new Date(now).toISOString().slice(0, 10);
+  const hour = new Date(now).getHours();
+
+  // 工具使用统计
+  if (event.tool && event.tool !== "Unknown") {
+    appStats.toolUsage[event.tool] = (appStats.toolUsage[event.tool] ?? 0) + 1;
+  }
+
+  // 事件类型统计
+  appStats.eventTypeCounts[event.event] = (appStats.eventTypeCounts[event.event] ?? 0) + 1;
+
+  // 每日统计
+  if (!appStats.dailyStats[today]) {
+    appStats.dailyStats[today] = { events: 0, toolCalls: 0, sessions: 0 };
+  }
+  appStats.dailyStats[today].events++;
+  if (event.event === "tool_start") appStats.dailyStats[today].toolCalls++;
+  if (event.event === "session_start") {
+    appStats.dailyStats[today].sessions++;
+    appStats.totalSessions++;
+  }
+
+  // 错误统计
+  if (event.event === "error") appStats.errorCount++;
+
+  // 权限统计
+  if (event.event === "permission_wait") appStats.permissionRequests++;
+
+  // 小时活跃度
+  appStats.hourlyActivity[hour] = (appStats.hourlyActivity[hour] ?? 0) + 1;
+
+  // 运行时间
+  appStats.totalRuntime = now - appStartTime;
+
+  // 最后事件时间
+  appStats.lastEventTime = now;
+
+  // 每 30 秒自动保存，避免频繁写入
+  if (!saveStatsDebounce) {
+    saveStatsDebounce = setTimeout(() => { saveStats(); saveStatsDebounce = null; }, 30_000);
+  }
+}
+
+let saveStatsDebounce: ReturnType<typeof setTimeout> | null = null;
 
 interface PendingPermission {
   id: string;
@@ -311,6 +380,9 @@ function broadcastConnectionStatus() {
   petWindow?.webContents.send("companion:connection", status);
   settingsWindow?.webContents.send("companion:connection", status);
   wsServer?.clients.forEach(client => client.send(JSON.stringify({ type: "connection", payload: status })));
+  if (tray) {
+    tray.setToolTip(status.connected ? "Clawd Companion — 已连接" : "Clawd Companion — 等待连接");
+  }
 }
 
 function broadcastUpdateStatus() {
@@ -343,6 +415,20 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on("update-downloaded", info => {
+    // 尝试从 info 获取路径，fallback 到缓存目录搜索
+    downloadedInstallerPath = (info as any).downloadedFile;
+    if (!downloadedInstallerPath) {
+      const fs = require("node:fs") as typeof import("node:fs");
+      const path = require("node:path") as typeof import("node:path");
+      const cacheDir = path.join(app.getPath("userData"), "..", "Cache", "Clawd Companion", "pending");
+      try {
+        const files = fs.readdirSync(cacheDir)
+          .filter((f: string) => f.endsWith(".exe"))
+          .map((f: string) => ({ name: f, time: fs.statSync(path.join(cacheDir, f)).mtimeMs }))
+          .sort((a: any, b: any) => b.time - a.time);
+        if (files.length > 0) downloadedInstallerPath = path.join(cacheDir, files[0].name);
+      } catch {}
+    }
     updateStatus = { checking: false, available: true, upToDate: false, downloading: false, downloaded: true, version: info.version, progress: 100 };
     broadcastUpdateStatus();
   });
@@ -533,6 +619,7 @@ function restartEventServer() {
 }
 
 function emitEvent(event: CompanionEvent) {
+  trackEvent(event);
   lastEvent = event;
   activeSessionId = event.sessionId ?? activeSessionId;
   activeClientType = event.clientType ?? activeClientType;
@@ -711,6 +798,8 @@ ipcMain.handle("permission:respond", async (_, response: PermissionResponse) => 
   if (!pending || pending.status !== "pending") return { success: false };
   clearTimeout(pending.timeout);
   pending.status = response.decision === "allow" ? "approved" : "denied";
+  if (response.decision === "allow") appStats.permissionApproved++;
+  else appStats.permissionDenied++;
   pending.decision = response.decision;
   pending.reason = response.reason ?? (response.decision === "allow" ? "Approved via Clawd" : "Denied via Clawd");
   pending.resolve({
@@ -778,14 +867,36 @@ ipcMain.handle("update:check", async () => {
   }
 });
 ipcMain.handle("update:install", () => {
-  if (updateStatus.downloaded) {
-    autoUpdater.quitAndInstall();
+  if (updateStatus.downloaded && downloadedInstallerPath) {
+    const { exec } = require("node:child_process");
+    exec(`powershell -Command "Start-Process '${downloadedInstallerPath}' -Verb RunAs"`);
+    setTimeout(() => app.quit(), 1500);
   }
 });
 ipcMain.handle("update:get-status", () => updateStatus);
 ipcMain.handle("app:get-version", () => app.getVersion());
+ipcMain.handle("stats:get", () => appStats);
+ipcMain.handle("stats:reset", () => {
+  appStats = { ...defaultStats, firstStartTime: Date.now() };
+  saveStats();
+});
 ipcMain.handle("idle-bubble:sync", (_, sprite: string | null) => {
   settingsWindow?.webContents.send("companion:idle-bubble-sync", sprite);
+});
+ipcMain.handle("open-external", (_, url: string) => {
+  shell.openExternal(url);
+});
+ipcMain.handle("settings:export", () => {
+  return JSON.stringify(settings, null, 2);
+});
+ipcMain.handle("settings:import", (_, json: string) => {
+  try {
+    const imported = JSON.parse(json) as Partial<CompanionSettings>;
+    saveSettings(imported);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 });
 ipcMain.handle("test:idle-bubble", () => {
   petWindow?.webContents.send("companion:test-idle-bubble");
@@ -803,6 +914,8 @@ if (!gotSingleInstanceLock) {
 
   app.whenReady().then(() => {
     settings = loadSettings();
+    appStats = loadStats();
+    appStartTime = Date.now();
     app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, path: process.execPath });
     createPetWindow();
     if (settings.openSettingsOnStart) createSettingsWindow();
@@ -817,6 +930,8 @@ if (!gotSingleInstanceLock) {
   });
 
   app.on("before-quit", () => {
+    appStats.totalRuntime = Date.now() - appStartTime;
+    saveStats();
     wsServer?.close();
     eventServer?.close();
     pendingPermissions.forEach(p => {

@@ -135,6 +135,8 @@ function useCompanion() {
   const [activePermissions, setActivePermissions] = useState<PermissionRequest[]>([]);
   const ribbonTimers = useRef<Map<string, number>>(new Map());
   const ribbonTimestamps = useRef<Map<string, number>>(new Map());
+  const eventThrottleRef = useRef<{ timer: number | null; lastFlush: number }>({ timer: null, lastFlush: 0 });
+  const pendingEventsRef = useRef<CompanionEvent[]>([]);
 
   function scheduleStreamRemoval(eventId: string) {
     window.setTimeout(() => {
@@ -170,7 +172,28 @@ function useCompanion() {
     const offSettings = window.companion.onSettings(setSettings);
     const offConnection = window.companion.onConnection(setConnection);
     const offEvent = window.companion.onEvent(event => {
-      setEvents(previous => [event, ...previous].slice(0, settings.eventHistoryLimit));
+      // 节流：100ms 内只刷新一次事件列表和 petState，减少高频事件时的渲染
+      const now = Date.now();
+      if (now - eventThrottleRef.current.lastFlush < 100) {
+        pendingEventsRef.current.push(event);
+        if (!eventThrottleRef.current.timer) {
+          eventThrottleRef.current.timer = window.setTimeout(() => {
+            const pending = pendingEventsRef.current;
+            pendingEventsRef.current = [];
+            eventThrottleRef.current.timer = null;
+            eventThrottleRef.current.lastFlush = Date.now();
+            const latest = pending[pending.length - 1];
+            setEvents(previous => [...pending.reverse(), ...previous].slice(0, settings.eventHistoryLimit));
+            setPetState(stateFromEvent(latest));
+            setCurrentEvent(latest);
+          }, 100 - (now - eventThrottleRef.current.lastFlush));
+        }
+      } else {
+        eventThrottleRef.current.lastFlush = now;
+        setEvents(previous => [event, ...previous].slice(0, settings.eventHistoryLimit));
+        setPetState(stateFromEvent(event));
+        setCurrentEvent(event);
+      }
 
       // tool_end 处理：找到匹配的 tool_start 并标记退出
       if (event.event === "tool_end") {
@@ -202,11 +225,7 @@ function useCompanion() {
           }
           return previous;
         });
-        // tool_end 不改变 petState 和 currentEvent
-      } else {
-        // 非 tool_end 事件：更新状态和当前事件
-        setPetState(stateFromEvent(event));
-        setCurrentEvent(event);
+        // tool_end 不改变 petState 和 currentEvent（由节流器统一处理）
       }
 
       // tool_start 处理：添加到工具流列表并设置保底超时
@@ -847,6 +866,7 @@ function SettingsApp() {
   });
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [previewIdleBubble, setPreviewIdleBubble] = useState<string | null>(null);
+  const [persistedStats, setPersistedStats] = useState<any>(null);
   const hookCommand = "node D:/build/GitLocal/Clawd-Companion/dist/hook-forwarder/index.js";
   const hookConfigPath = "C:/Users/Doulor/.claude/settings.json";
   const hookSnippet = useMemo(() => buildHookSnippet(hookCommand), [hookCommand]);
@@ -854,12 +874,15 @@ function SettingsApp() {
   useEffect(() => {
     window.companion.getAppVersion().then(setAppVersion);
     window.companion.getUpdateStatus().then(setUpdateStatus);
+    window.companion.getStats().then(setPersistedStats);
     const offUpdate = window.companion.onUpdateStatus(setUpdateStatus);
     const offIdle = window.companion.onTriggerIdleBubble(() => {
       setPreviewIdleBubble("idle");
       setTimeout(() => setPreviewIdleBubble(null), 2500);
     });
-    return () => { offUpdate(); offIdle(); };
+    // 每 10 秒刷新统计
+    const statsInterval = window.setInterval(() => window.companion.getStats().then(setPersistedStats), 10_000);
+    return () => { offUpdate(); offIdle(); window.clearInterval(statsInterval); };
   }, []);
 
   useEffect(() => {
@@ -1000,25 +1023,8 @@ function SettingsApp() {
           <Slider label="事件历史" min={12} max={100} step={4} value={settings.eventHistoryLimit} format={value => `${value} 条`} onChange={eventHistoryLimit => updateSettings({ eventHistoryLimit })} />
         </Panel>
 
-        <Panel title="运行统计" icon={<Gauge size={18} />}>
-          <div className="stats-grid">
-            <div className="stat-item">
-              <span className="stat-value">{events.length}</span>
-              <span className="stat-label">事件总数</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-value">{toolStreams.filter(s => !s.exiting).length}</span>
-              <span className="stat-label">活跃工具</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-value">{events.filter(e => e.event === "tool_start").length}</span>
-              <span className="stat-label">工具调用</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-value">{connection.lastEventAt ? timeAgo(connection.lastEventAt, now) : "—"}</span>
-              <span className="stat-label">最后活动</span>
-            </div>
-          </div>
+        <Panel title="运行统计" icon={<Gauge size={18} />} wide>
+          {persistedStats ? <StatsPanel stats={persistedStats} /> : <p className="note">加载中...</p>}
           <div className="panel-divider" />
           <Toggle label="高级选项" checked={showAdvanced} onChange={setShowAdvanced} />
         </Panel>
@@ -1065,6 +1071,35 @@ function SettingsApp() {
           </Panel>
         )}
 
+        {showAdvanced && (
+          <Panel title="配置管理" icon={<FileText size={18} />}>
+            <div className="command-row" style={{ marginBottom: 8 }}>
+              <span>导出当前配置</span>
+              <button onClick={async () => {
+                const json = await window.companion.exportSettings();
+                await navigator.clipboard.writeText(json);
+                setCopied("export");
+                setTimeout(() => setCopied(null), 1600);
+              }}><Clipboard size={15} />{copied === "export" ? "已复制" : "复制到剪贴板"}</button>
+            </div>
+            <div className="command-row">
+              <span>导入配置</span>
+              <button onClick={async () => {
+                const text = await navigator.clipboard.readText();
+                const result = await window.companion.importSettings(text);
+                if (result.ok) {
+                  // saveSettings 会自动广播 com panion:settings，useCompanion 会自动更新
+                  setCopied("import-ok");
+                } else {
+                  setCopied("import-fail");
+                }
+                setTimeout(() => setCopied(null), 2000);
+              }}><FileText size={15} />{copied === "import-ok" ? "导入成功" : copied === "import-fail" ? "导入失败" : "从剪贴板导入"}</button>
+            </div>
+            <p className="note">导出会将全部设置复制到剪贴板（JSON 格式）。导入会覆盖当前设置。</p>
+          </Panel>
+        )}
+
         <Panel title="最近事件" icon={<Bell size={18} />} wide>
           <div className="event-list">
             {events.length === 0 ? <div className="empty">还没有收到事件。先复制 hooks 配置，或点击测试事件看状态变化。</div> : events.map(event => (
@@ -1084,16 +1119,14 @@ function SettingsApp() {
         <div className="version-left">
           <span className="version-label">Clawd Companion</span>
           <span className="version-number">v{appVersion}</span>
-          <a
+          <button
             className="version-link"
-            href="https://github.com/Doulor/Clawd-Companion"
-            target="_blank"
-            rel="noreferrer"
+            onClick={() => window.companion.openExternal("https://github.com/Doulor/Clawd-Companion")}
             title="在 GitHub 上查看"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.605-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12 24 5.37 18.63 0 12 0z"/></svg>
             GitHub
-          </a>
+          </button>
         </div>
         <div className="version-right">
           {updateStatus.error ? (
@@ -1477,6 +1510,99 @@ function RangeSlider({ label, min, max, step, low, high, format, onChange }: {
       </div>
       <b>{format(low)} — {format(high)}</b>
     </label>
+  );
+}
+
+function formatDuration(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${h}h ${m % 60}m`;
+  if (m > 0) return `${m}m ${s % 60}s`;
+  return `${s}s`;
+}
+
+function StatsPanel({ stats }: { stats: any }) {
+  const toolUsage = stats.toolUsage as Record<string, number>;
+  const sortedTools: Array<[string, number]> = Object.entries(toolUsage).sort((a, b) => b[1] - a[1]);
+  const topHours = stats.hourlyActivity ? [...stats.hourlyActivity.map((v: number, i: number) => ({ hour: i, count: v }))].sort((a: any, b: any) => b.count - a.count).slice(0, 3) : [];
+  const today = new Date().toISOString().slice(0, 10);
+  const todayStats = stats.dailyStats?.[today];
+  const totalToolCalls = Object.values(stats.toolUsage ?? {}).reduce((a: number, b: any) => a + b, 0) as number;
+  const days = Object.keys(stats.dailyStats ?? {}).length;
+  const avgDaily = days > 0 ? Math.round(totalToolCalls / days) : 0;
+  const permTotal = (stats.permissionApproved ?? 0) + (stats.permissionDenied ?? 0);
+  const permRate = permTotal > 0 ? Math.round((stats.permissionApproved / permTotal) * 100) : 0;
+
+  return (
+    <div className="stats-deep">
+      <div className="stats-grid">
+        <div className="stat-item"><span className="stat-value">{stats.totalSessions ?? 0}</span><span className="stat-label">总会话数</span></div>
+        <div className="stat-item"><span className="stat-value">{totalToolCalls}</span><span className="stat-label">总工具调用</span></div>
+        <div className="stat-item"><span className="stat-value">{stats.errorCount ?? 0}</span><span className="stat-label">错误次数</span></div>
+        <div className="stat-item"><span className="stat-value">{formatDuration(stats.totalRuntime ?? 0)}</span><span className="stat-label">累计运行</span></div>
+        <div className="stat-item"><span className="stat-value">{days}</span><span className="stat-label">活跃天数</span></div>
+        <div className="stat-item"><span className="stat-value">{avgDaily}</span><span className="stat-label">日均调用</span></div>
+      </div>
+      <div className="panel-divider" />
+      <h3 className="panel-subtitle">今日概览</h3>
+      <div className="stats-grid">
+        <div className="stat-item"><span className="stat-value">{todayStats?.events ?? 0}</span><span className="stat-label">事件</span></div>
+        <div className="stat-item"><span className="stat-value">{todayStats?.toolCalls ?? 0}</span><span className="stat-label">工具调用</span></div>
+        <div className="stat-item"><span className="stat-value">{todayStats?.sessions ?? 0}</span><span className="stat-label">会话</span></div>
+      </div>
+      {sortedTools.length > 0 && (
+        <>
+          <div className="panel-divider" />
+          <h3 className="panel-subtitle">工具使用排行</h3>
+          <div className="tool-rank-list">
+            {sortedTools.map(([tool, count]: [string, any], i: number) => (
+              <div key={tool} className="tool-rank-row">
+                <span className="tool-rank-pos">{i + 1}</span>
+                <span className="tool-rank-name">{tool}</span>
+                <div className="tool-rank-bar">
+                  <div className="tool-rank-fill" style={{ width: `${(count / (sortedTools[0]?.[1] ?? 1)) * 100}%` }} />
+                </div>
+                <span className="tool-rank-count">{count}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {permTotal > 0 && (
+        <>
+          <div className="panel-divider" />
+          <h3 className="panel-subtitle">权限请求</h3>
+          <div className="stats-grid">
+            <div className="stat-item"><span className="stat-value">{permTotal}</span><span className="stat-label">总请求</span></div>
+            <div className="stat-item"><span className="stat-value" style={{ color: "var(--mint)" }}>{stats.permissionApproved ?? 0}</span><span className="stat-label">已批准</span></div>
+            <div className="stat-item"><span className="stat-value" style={{ color: "var(--coral)" }}>{stats.permissionDenied ?? 0}</span><span className="stat-label">已拒绝</span></div>
+            <div className="stat-item"><span className="stat-value">{permRate}%</span><span className="stat-label">批准率</span></div>
+          </div>
+        </>
+      )}
+      {topHours.length > 0 && topHours.some((h: any) => h.count > 0) && (
+        <>
+          <div className="panel-divider" />
+          <h3 className="panel-subtitle">最活跃时段</h3>
+          <div className="stats-grid">
+            {topHours.filter((h: any) => h.count > 0).map((h: any) => (
+              <div key={h.hour} className="stat-item">
+                <span className="stat-value">{String(h.hour).padStart(2, "0")}:00</span>
+                <span className="stat-label">{h.count} 次</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      <div className="panel-divider" />
+      <button className="inline-action danger" onClick={async () => {
+        if (confirm("确定要清空所有统计数据吗？")) {
+          await window.companion.resetStats();
+          window.location.reload();
+        }
+      }}>清空统计数据</button>
+    </div>
   );
 }
 
