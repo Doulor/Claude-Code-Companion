@@ -1317,6 +1317,7 @@ function SettingsApp() {
         </div>
       </section>
       <nav className="tab-bar">
+        <div className="tab-mark"><Sparkles size={18} /></div>
         <button className={`tab-item ${activeSection === "general" ? "active" : ""}`} onClick={() => jumpTo("general")}><Gauge size={16} /> 总览</button>
         <button className={`tab-item ${activeSection === "connect" ? "active" : ""}`} onClick={() => jumpTo("connect")}><PlugZap size={16} /> 连接</button>
         <button className={`tab-item ${activeSection === "appearance" ? "active" : ""}`} onClick={() => jumpTo("appearance")}><Bot size={16} /> 外观</button>
