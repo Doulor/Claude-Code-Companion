@@ -895,7 +895,7 @@ button { border: 0; cursor: pointer; }
   overflow: hidden;
   display: grid;
   grid-template-columns: 1fr;
-  grid-template-rows: 52px 1fr auto;
+  grid-template-rows: 52px auto 1fr auto;
   gap: 0;
   padding: 0 0 0 0;
   background:
@@ -959,6 +959,7 @@ button { border: 0; cursor: pointer; }
   border-color: rgba(217, 107, 90, 0.4);
 }
 .tab-bar {
+  grid-column: 1;
   display: flex;
   align-items: stretch;
   gap: 0;
