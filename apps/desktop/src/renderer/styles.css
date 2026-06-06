@@ -971,12 +971,11 @@ button { border: 0; cursor: pointer; }
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  margin-right: 6px;
-  color: #fff1cb;
-  background: var(--black);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(36, 29, 23, 0.2);
+  width: 32px;
+  margin-right: 8px;
+  padding-right: 10px;
+  border-right: 1px solid var(--line);
+  color: var(--honey);
   flex-shrink: 0;
 }
 .tab-item {
