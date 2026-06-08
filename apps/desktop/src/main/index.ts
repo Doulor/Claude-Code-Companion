@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, Notification, screen, shell, dialog, globalShortcut } from "electron";
+import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, Notification, screen, shell, dialog, globalShortcut, net } from "electron";
 import electronUpdater from "electron-updater";
 const { autoUpdater } = electronUpdater;
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
@@ -8,11 +8,15 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { homedir } from "node:os";
 import { spawn } from "node:child_process";
-import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings, PermissionPollResult, PermissionResponse, UpdateStatus, AppStats, TokenStats, EventHistoryEntry, NotificationRule, CustomPlugin } from "../shared/events.js";
+import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings, PermissionPollResult, PermissionResponse, UpdateStatus, AppStats, CustomPlugin, PluginMarketIndex, PluginRunRecord } from "../shared/events.js";
 import { defaultSettings, defaultStats } from "../shared/events.js";
 import { scanTokenStats, setCachePath as setTokenCachePath } from "./token-stats.js";
 import { setGitEventHandler, startGitWatcher, stopGitWatcher } from "./git-watcher.js";
-import { getSoundDataUrl, previewSoundDataUrl } from "./sound.js";
+import { builtInPath, fileToDataUrl, getSoundDataUrl, previewSoundDataUrl } from "./sound.js";
+import { loadSettings as loadManagedSettings, saveSettings as saveManagedSettings } from "./settingsManager.js";
+import { appendEventHistory, loadEventHistory, saveEventHistory, type EventHistoryStore } from "./event-history.js";
+import { appendPluginRun, canRunPlugin, normalizePlugin, runPlugin } from "./plugin-runner.js";
+import { installMarketPlugin, parseMarketIndex, rawUrl, safeMarketPath } from "./plugin-market.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
@@ -23,7 +27,10 @@ const appDataDir = join(app.getPath("userData"), "clawd-companion");
 const settingsPath = join(appDataDir, "settings.json");
 const statsPath = join(appDataDir, "stats.json");
 const logPath = join(appDataDir, "runtime.log");
+const historyPath = join(appDataDir, "event-history.json");
 const tokenCachePath = join(appDataDir, "token-stats-cache.json");
+const localPluginDir = join(appDataDir, "plugins");
+const marketBaseUrl = "https://raw.githubusercontent.com/Doulor/Clawd-Companion/main/plugin-market";
 setTokenCachePath(tokenCachePath);
 let lastKnownCwd: string | null = null;
 
@@ -36,7 +43,8 @@ let wsServer: WebSocketServer | null = null;
 let serverListening = false;
 let serverError: string | undefined;
 let lastEvent: CompanionEvent | null = null;
-let eventHistory: EventHistoryEntry[] = [];
+let eventHistoryStore: EventHistoryStore = { events: [], sessions: [] };
+let pluginRuns: PluginRunRecord[] = [];
 let suppressPetMoveSave = false;
 let saveDebounce: ReturnType<typeof setTimeout> | null = null;
 let trackedPetPos = { x: 0, y: 0 };
@@ -175,25 +183,14 @@ function syncAutoStartMarker(enabled: boolean) {
 }
 
 function loadSettings(): CompanionSettings {
-  ensureDataDir();
-  if (!existsSync(settingsPath)) {
-    writeFileSync(settingsPath, JSON.stringify(defaultSettings, null, 2));
-    return defaultSettings;
-  }
-  const stored = JSON.parse(readFileSync(settingsPath, "utf8")) as Partial<CompanionSettings>;
-  return {
-    ...defaultSettings,
-    ...stored,
-    positionOffsets: { ...defaultSettings.positionOffsets, ...(stored.positionOffsets ?? {}) },
-    zoneSizes: stored.zoneSizes ?? defaultSettings.zoneSizes
-  };
+  return loadManagedSettings(appDataDir);
 }
 
 function saveSettings(next: Partial<CompanionSettings>) {
   const previousPort = settings.port;
   const previousViewScale = settings.viewScale ?? settings.petScale;
   settings = { ...settings, ...next };
-  writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+  saveManagedSettings(appDataDir, settings);
   app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, path: process.execPath });
   syncAutoStartMarker(settings.autoStartWithCli);
   if (petWindow && (settings.viewScale ?? settings.petScale) !== previousViewScale) {
@@ -299,7 +296,7 @@ function createPetWindow() {
     }
     trackedPetPos = { x: clamped.x, y: clamped.y };
     settings = { ...settings, position: clamped };
-    writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+    saveManagedSettings(appDataDir, settings);
   });
 }
 
@@ -362,10 +359,28 @@ function createSettingsWindow() {
 
 function makeTrayIcon() {
   tray = new Tray(iconPath);
-  tray.setToolTip("Clawd Companion");
+  refreshTrayMenu();
+}
+
+function refreshTrayMenu() {
+  if (!tray) return;
+  const status = getConnectionStatus();
+  tray.setToolTip(status.connected ? "Clawd Companion — 已连接" : "Clawd Companion — 等待连接");
   tray.setContextMenu(Menu.buildFromTemplate([
+    { label: status.connected ? `已连接：${status.activeClientLabel ?? "Claude Code"}` : status.serverListening ? `等待连接：127.0.0.1:${status.port}` : "本地服务未监听", enabled: false },
+    { label: `最近事件：${status.lastEventTitle ?? "暂无"}`, enabled: false },
+    { type: "separator" },
     { label: "打开配置", click: createSettingsWindow },
-    { label: "显示/隐藏桌宠", click: () => petWindow?.isVisible() ? petWindow.hide() : petWindow?.show() },
+    { label: "打开诊断中心", click: () => { createSettingsWindow(); settingsWindow?.webContents.send("companion:open-section", "doctor"); } },
+    { label: petWindow?.isVisible() ? "隐藏桌宠" : "显示桌宠", click: () => { petWindow?.isVisible() ? petWindow.hide() : petWindow?.show(); refreshTrayMenu(); } },
+    { label: settings.alwaysOnTop ? "关闭置顶" : "开启置顶", click: () => saveSettings({ alwaysOnTop: !settings.alwaysOnTop }) },
+    { label: settings.clickThrough ? "关闭点击穿透" : "开启点击穿透", click: () => saveSettings({ clickThrough: !settings.clickThrough }) },
+    { type: "separator" },
+    { label: `隐私模式：${settings.privacyMode}`, submenu: [
+      { label: "safe", type: "radio", checked: settings.privacyMode === "safe", click: () => saveSettings({ privacyMode: "safe" }) },
+      { label: "standard", type: "radio", checked: settings.privacyMode === "standard", click: () => saveSettings({ privacyMode: "standard" }) },
+      { label: "detailed", type: "radio", checked: settings.privacyMode === "detailed", click: () => saveSettings({ privacyMode: "detailed" }) }
+    ] },
     { type: "separator" },
     { label: "退出", click: () => app.quit() }
   ]));
@@ -418,9 +433,7 @@ function broadcastConnectionStatus() {
   petWindow?.webContents.send("companion:connection", status);
   settingsWindow?.webContents.send("companion:connection", status);
   wsServer?.clients.forEach(client => client.send(JSON.stringify({ type: "connection", payload: status })));
-  if (tray) {
-    tray.setToolTip(status.connected ? "Clawd Companion — 已连接" : "Clawd Companion — 等待连接");
-  }
+  refreshTrayMenu();
 }
 
 function broadcastUpdateStatus() {
@@ -689,41 +702,25 @@ function restartEventServer() {
 }
 
 function runPluginsForEvent(event: CompanionEvent) {
-  const plugins = settings.customPlugins ?? [];
+  const plugins = (settings.customPlugins ?? []).map(normalizePlugin);
   for (const plugin of plugins) {
-    if (!plugin.enabled || !plugin.scriptPath || !plugin.events.includes(event.event)) continue;
-    if (!existsSync(plugin.scriptPath)) {
-      logRuntime(`Plugin skipped, script not found: ${plugin.name} (${plugin.scriptPath})`);
+    const runnable = canRunPlugin(plugin, event);
+    if (!runnable.ok) {
+      if (plugin.enabled && plugin.events.includes(event.event)) logRuntime(`Plugin skipped: ${plugin.name}: ${runnable.reason}`);
       continue;
     }
-    const child = spawn(process.execPath, [plugin.scriptPath], {
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true
+    runPlugin(plugin, event, record => {
+      pluginRuns = appendPluginRun(pluginRuns, record);
+      logRuntime(`Plugin exited: ${record.pluginName} code=${record.exitCode} duration=${record.durationMs}ms${record.timedOut ? " timed-out" : ""}`);
+      settingsWindow?.webContents.send("companion:plugin-run", record);
     });
-    const timeout = setTimeout(() => {
-      child.kill();
-      logRuntime(`Plugin timed out: ${plugin.name}`);
-    }, 3000);
-
-    child.stdout.on("data", data => logRuntime(`[plugin:${plugin.name}:stdout] ${String(data).trim()}`));
-    child.stderr.on("data", data => logRuntime(`[plugin:${plugin.name}:stderr] ${String(data).trim()}`));
-    child.on("error", err => logRuntime(`Plugin failed: ${plugin.name}: ${err.message}`));
-    child.on("close", code => {
-      clearTimeout(timeout);
-      logRuntime(`Plugin exited: ${plugin.name} code=${code}`);
-    });
-    child.stdin.end(JSON.stringify(event));
   }
 }
 
 function emitEvent(event: CompanionEvent) {
   trackEvent(event);
-  // Event History
-  eventHistory.push({ id: event.id, event, timestamp: Date.now() });
-  const historyLimit = settings.eventHistoryLimit ?? 40;
-  if (eventHistory.length > historyLimit) {
-    eventHistory = eventHistory.slice(eventHistory.length - historyLimit);
-  }
+  eventHistoryStore = appendEventHistory(eventHistoryStore, event, settings.eventHistoryLimit ?? 40);
+  saveEventHistory(historyPath, eventHistoryStore);
   lastEvent = event;
   activeSessionId = event.sessionId ?? activeSessionId;
   activeClientType = event.clientType ?? activeClientType;
@@ -742,8 +739,9 @@ function emitEvent(event: CompanionEvent) {
   runPluginsForEvent(event);
 
   const rule = settings.notificationRules?.find(r => r.eventType === event.event && r.enabled);
-  const shouldNotify = rule ? rule.systemNotification : settings.doneSound && event.event === "done";
-  const shouldPlaySound = rule ? rule.playSound : true;
+  const notificationsEnabled = settings.notificationsEnabled || settings.doneSound;
+  const shouldNotify = notificationsEnabled && (rule ? rule.systemNotification : settings.doneSound && event.event === "done");
+  const shouldPlaySound = notificationsEnabled && (rule ? rule.playSound : false);
 
   if (shouldNotify && Notification.isSupported()) {
     new Notification({ title: event.title, body: event.message }).show();
@@ -782,13 +780,14 @@ function normalizeCommandPath(pathLike: string): string {
   return pathLike.replaceAll(String.fromCharCode(92), "/");
 }
 
-function getHookCommand(): string {
+function getForwarderPath(): string {
   const devPath = normalizeCommandPath(join(__dirname, "../../dist/hook-forwarder/index.js"));
-  if (!app.isPackaged && existsSync(devPath)) {
-    return `node "${devPath}"`;
-  }
-  const prodPath = normalizeCommandPath(join(process.resourcesPath, "hook-forwarder/index.js"));
-  return `node "${prodPath}"`;
+  if (!app.isPackaged && existsSync(devPath)) return devPath;
+  return normalizeCommandPath(join(process.resourcesPath, "hook-forwarder/index.js"));
+}
+
+function getHookCommand(): string {
+  return `node "${getForwarderPath()}"`;
 }
 
 function checkHooks(): HooksStatus {
@@ -938,6 +937,26 @@ ipcMain.handle("hooks:check", () => checkHooks());
 ipcMain.handle("hooks:install", () => installHooks());
 ipcMain.handle("hooks:repair", () => repairHooks());
 ipcMain.handle("hooks:remove", () => removeHooks());
+ipcMain.handle("doctor:get-report", () => {
+  const forwarderPath = getForwarderPath();
+  return {
+    generatedAt: Date.now(),
+    appVersion: app.getVersion(),
+    connection: getConnectionStatus(),
+    hooks: checkHooks(),
+    forwarder: {
+      expectedPath: forwarderPath,
+      exists: existsSync(forwarderPath),
+      autoStartMarkerPath,
+      autoStartMarkerExists: existsSync(autoStartMarkerPath)
+    },
+    recent: {
+      lastEventAt: lastEvent?.timestamp,
+      lastEventTitle: lastEvent?.title,
+      lastError: serverError
+    }
+  };
+});
 ipcMain.handle("permission:respond", async (_, response: PermissionResponse) => {
   const pending = pendingPermissions.get(response.id);
   if (!pending || pending.status !== "pending") return { success: false };
@@ -992,7 +1011,7 @@ ipcMain.handle("window:move-pet-by", (_, delta: { dx: number; dy: number }) => {
   settings = { ...settings, position: clamped };
   if (saveDebounce) clearTimeout(saveDebounce);
   saveDebounce = setTimeout(() => {
-    writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+    saveManagedSettings(appDataDir, settings);
     saveDebounce = null;
   }, 400);
 });
@@ -1032,6 +1051,16 @@ ipcMain.handle("token-stats:get", async (_, force?: boolean) => {
 });
 ipcMain.handle("sound:preview", (_, name: "done" | "error" | "permission" | "session-start") => {
   return previewSoundDataUrl(name);
+});
+ipcMain.handle("sound:get-default-paths", () => ({
+  done: builtInPath("done"),
+  error: builtInPath("error"),
+  permission: builtInPath("permission"),
+  "session-start": builtInPath("session-start")
+}));
+ipcMain.handle("sound:preview-file", (_, filePath: string) => {
+  const dataUrl = fileToDataUrl(filePath);
+  return dataUrl ? { ok: true, dataUrl } : { ok: false, error: "读取文件失败" };
 });
 ipcMain.handle("sound:pick-file", async () => {
   const result = await dialog.showOpenDialog({
@@ -1114,15 +1143,19 @@ ipcMain.handle("stats:import-file", async () => {
 });
 
 // Event History
-ipcMain.handle("events:get-history", () => eventHistory);
-ipcMain.handle("events:clear-history", () => { eventHistory = []; });
+ipcMain.handle("events:get-history", () => eventHistoryStore.events);
+ipcMain.handle("sessions:get-history", () => eventHistoryStore.sessions);
+ipcMain.handle("events:clear-history", () => {
+  eventHistoryStore = { events: [], sessions: [] };
+  saveEventHistory(historyPath, eventHistoryStore);
+});
 ipcMain.handle("events:export-file", async () => {
   const result = await dialog.showSaveDialog({
     defaultPath: `clawd-events-${new Date().toISOString().slice(0, 10)}.json`,
     filters: [{ name: "JSON", extensions: ["json"] }]
   });
   if (!result.canceled && result.filePath) {
-    writeFileSync(result.filePath, JSON.stringify({ exportedAt: Date.now(), events: eventHistory }, null, 2));
+    writeFileSync(result.filePath, JSON.stringify({ exportedAt: Date.now(), ...eventHistoryStore }, null, 2));
     return { ok: true };
   }
   return { ok: false };
@@ -1140,26 +1173,56 @@ ipcMain.handle("display:get-monitors", () => {
 });
 
 // Plugins
-ipcMain.handle("plugins:get", () => settings.customPlugins ?? []);
+function marketRootPath(): string {
+  const devPath = join(__dirname, "../../plugin-market");
+  if (!app.isPackaged && existsSync(devPath)) return devPath;
+  return join(process.resourcesPath, "plugin-market");
+}
+
+function readBundledMarketFile(path: string): string {
+  const safePath = path === "index.json" ? path : safeMarketPath(path);
+  return readFileSync(join(marketRootPath(), safePath), "utf8");
+}
+
+async function fetchText(url: string): Promise<string> {
+  const response = await net.fetch(url);
+  if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  return response.text();
+}
+
+async function fetchMarketFile(path: string): Promise<string> {
+  try {
+    return await fetchText(path === "index.json" ? `${marketBaseUrl}/index.json` : rawUrl(marketBaseUrl, path));
+  } catch (error) {
+    logRuntime(`Plugin market network fetch failed for ${path}: ${error instanceof Error ? error.message : String(error)}; using bundled market`);
+    return readBundledMarketFile(path);
+  }
+}
+
+async function fetchMarketIndex(): Promise<PluginMarketIndex> {
+  const text = await fetchMarketFile("index.json");
+  return parseMarketIndex(JSON.parse(text));
+}
+
+ipcMain.handle("plugins:get", () => (settings.customPlugins ?? []).map(normalizePlugin));
+ipcMain.handle("plugins:get-runs", () => pluginRuns);
 ipcMain.handle("plugins:save", (_, plugins: CustomPlugin[]) => {
-  saveSettings({ customPlugins: plugins });
+  saveSettings({ customPlugins: plugins.map(normalizePlugin) });
   return settings.customPlugins;
 });
-
-// Animation recording: renderer records WebM, main process saves it to disk.
-ipcMain.handle("gif:record", () => ({ ok: true, message: "Recording started in renderer" }));
-ipcMain.handle("gif:save", async (_, dataUrl: string) => {
-  const result = await dialog.showSaveDialog({
-    defaultPath: "clawd-animation.webm",
-    filters: [{ name: "WebM Video", extensions: ["webm"] }]
-  });
-  if (!result.canceled && result.filePath) {
-    const base64Data = dataUrl.replace(/^data:video\/webm[^,]*,/, "");
-    writeFileSync(result.filePath, Buffer.from(base64Data, "base64"));
-    return { ok: true };
-  }
-  return { ok: false };
+ipcMain.handle("plugins:market-get", async () => fetchMarketIndex());
+ipcMain.handle("plugins:market-install", async (_, pluginId: string) => {
+  const market = await fetchMarketIndex();
+  const item = market.plugins.find(plugin => plugin.id === pluginId);
+  if (!item) return { ok: false, error: "Plugin not found in market" };
+  const entry = await fetchMarketFile(item.entry);
+  const manifest = await fetchMarketFile(item.manifest);
+  const installed = installMarketPlugin(localPluginDir, item, { entry, manifest });
+  const next = [...(settings.customPlugins ?? []).filter(plugin => plugin.id !== installed.id), installed];
+  saveSettings({ customPlugins: next });
+  return { ok: true, plugin: installed };
 });
+
 ipcMain.handle("test:idle-bubble", () => {
   petWindow?.webContents.send("companion:test-idle-bubble");
   settingsWindow?.webContents.send("companion:test-idle-bubble");
@@ -1176,6 +1239,7 @@ if (!gotSingleInstanceLock) {
 
   app.whenReady().then(() => {
     settings = loadSettings();
+    eventHistoryStore = loadEventHistory(historyPath);
     appStats = loadStats();
     appStartTime = Date.now();
     app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, path: process.execPath });

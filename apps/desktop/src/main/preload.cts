@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings, PermissionRequest, PermissionResponse, UpdateStatus } from "../shared/events.js";
+import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings, PermissionRequest, PermissionResponse, UpdateStatus, DoctorReport, PluginMarketIndex, PluginRunRecord, SessionHistory } from "../shared/events.js";
 
 interface HooksStatus {
   installed: boolean;
@@ -59,6 +59,8 @@ contextBridge.exposeInMainWorld("companion", {
   getAppVersion: () => ipcRenderer.invoke("app:get-version") as Promise<string>,
   getTokenStats: (force?: boolean) => ipcRenderer.invoke("token-stats:get", force) as Promise<import("../shared/events.js").TokenStats>,
   previewSound: (name: "done" | "error" | "permission" | "session-start") => ipcRenderer.invoke("sound:preview", name) as Promise<{ ok: boolean; dataUrl?: string; error?: string }>,
+  getDefaultSoundPaths: () => ipcRenderer.invoke("sound:get-default-paths") as Promise<Record<"done" | "error" | "permission" | "session-start", string>>,
+  previewSoundFile: (filePath: string) => ipcRenderer.invoke("sound:preview-file", filePath) as Promise<{ ok: boolean; dataUrl?: string; error?: string }>,
   pickSoundFile: () => ipcRenderer.invoke("sound:pick-file") as Promise<string | null>,
   triggerIdleBubble: () => ipcRenderer.invoke("test:idle-bubble") as Promise<void>,
   syncIdleBubble: (sprite: string | null) => ipcRenderer.invoke("idle-bubble:sync", sprite) as Promise<void>,
@@ -68,12 +70,14 @@ contextBridge.exposeInMainWorld("companion", {
     return () => ipcRenderer.off("companion:idle-bubble-sync", handler);
   },
   getEventHistory: () => ipcRenderer.invoke("events:get-history") as Promise<import("../shared/events.js").EventHistoryEntry[]>,
+  getSessionHistory: () => ipcRenderer.invoke("sessions:get-history") as Promise<SessionHistory[]>,
   clearEventHistory: () => ipcRenderer.invoke("events:clear-history") as Promise<void>,
   exportEventHistoryFile: () => ipcRenderer.invoke("events:export-file") as Promise<{ ok: boolean; error?: string }>,
   getMonitors: () => ipcRenderer.invoke("display:get-monitors") as Promise<Array<{id: string; bounds: {x: number; y: number; width: number; height: number}; name: string; isPrimary: boolean}>>,
-  recordGif: () => ipcRenderer.invoke("gif:record") as Promise<{ok: boolean; message?: string}>,
-  saveGif: (dataUrl: string) => ipcRenderer.invoke("gif:save", dataUrl) as Promise<{ok: boolean; error?: string}>,
   getPlugins: () => ipcRenderer.invoke("plugins:get") as Promise<import("../shared/events.js").CustomPlugin[]>,
+  getPluginRuns: () => ipcRenderer.invoke("plugins:get-runs") as Promise<PluginRunRecord[]>,
+  getPluginMarket: () => ipcRenderer.invoke("plugins:market-get") as Promise<PluginMarketIndex>,
+  installMarketPlugin: (pluginId: string) => ipcRenderer.invoke("plugins:market-install", pluginId) as Promise<{ ok: boolean; plugin?: import("../shared/events.js").CustomPlugin; error?: string }>,
   savePlugins: (plugins: import("../shared/events.js").CustomPlugin[]) => ipcRenderer.invoke("plugins:save", plugins) as Promise<import("../shared/events.js").CustomPlugin[]>,
       openExternal: (url: string) => ipcRenderer.invoke("open-external", url) as Promise<void>,
   getStats: () => ipcRenderer.invoke("stats:get") as Promise<import("../shared/events.js").AppStats>,
@@ -82,6 +86,7 @@ contextBridge.exposeInMainWorld("companion", {
   importSettingsFile: () => ipcRenderer.invoke("settings:import-file") as Promise<{ ok: boolean; error?: string }>,
   exportStatsFile: () => ipcRenderer.invoke("stats:export-file") as Promise<{ ok: boolean; error?: string }>,
   importStatsFile: () => ipcRenderer.invoke("stats:import-file") as Promise<{ ok: boolean; error?: string }>,
+  getDoctorReport: () => ipcRenderer.invoke("doctor:get-report") as Promise<DoctorReport>,
   onTriggerIdleBubble: (callback: () => void) => {
     const handler = () => callback();
     ipcRenderer.on("companion:test-idle-bubble", handler);
@@ -96,6 +101,11 @@ contextBridge.exposeInMainWorld("companion", {
     const handler = (_: Electron.IpcRendererEvent, dataUrl: string) => callback(dataUrl);
     ipcRenderer.on("companion:play-sound", handler);
     return () => ipcRenderer.off("companion:play-sound", handler);
+  },
+  onOpenSection: (callback: (section: string) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, section: string) => callback(section);
+    ipcRenderer.on("companion:open-section", handler);
+    return () => ipcRenderer.off("companion:open-section", handler);
   }
 });
 
@@ -129,18 +139,22 @@ declare global {
       getAppVersion: () => Promise<string>;
       getTokenStats: (force?: boolean) => Promise<import("../shared/events.js").TokenStats>;
       previewSound: (name: "done" | "error" | "permission" | "session-start") => Promise<{ ok: boolean; dataUrl?: string; error?: string }>;
+      getDefaultSoundPaths: () => Promise<Record<"done" | "error" | "permission" | "session-start", string>>;
+      previewSoundFile: (filePath: string) => Promise<{ ok: boolean; dataUrl?: string; error?: string }>;
       pickSoundFile: () => Promise<string | null>;
       triggerIdleBubble: () => Promise<void>;
       onTriggerIdleBubble: (callback: () => void) => () => void;
       syncIdleBubble: (sprite: string | null) => Promise<void>;
       onIdleBubbleSync: (callback: (sprite: string | null) => void) => () => void;
       getEventHistory: () => Promise<import("../shared/events.js").EventHistoryEntry[]>;
+      getSessionHistory: () => Promise<SessionHistory[]>;
       clearEventHistory: () => Promise<void>;
       exportEventHistoryFile: () => Promise<{ ok: boolean; error?: string }>;
       getMonitors: () => Promise<Array<{id: string; bounds: {x: number; y: number; width: number; height: number}; name: string; isPrimary: boolean}>>;
-      recordGif: () => Promise<{ok: boolean; message?: string}>;
-      saveGif: (dataUrl: string) => Promise<{ok: boolean; error?: string}>;
       getPlugins: () => Promise<import("../shared/events.js").CustomPlugin[]>;
+      getPluginRuns: () => Promise<PluginRunRecord[]>;
+      getPluginMarket: () => Promise<PluginMarketIndex>;
+      installMarketPlugin: (pluginId: string) => Promise<{ ok: boolean; plugin?: import("../shared/events.js").CustomPlugin; error?: string }>;
       savePlugins: (plugins: import("../shared/events.js").CustomPlugin[]) => Promise<import("../shared/events.js").CustomPlugin[]>;
       openExternal: (url: string) => Promise<void>;
       getStats: () => Promise<import("../shared/events.js").AppStats>;
@@ -149,8 +163,10 @@ declare global {
       importSettingsFile: () => Promise<{ ok: boolean; error?: string }>;
       exportStatsFile: () => Promise<{ ok: boolean; error?: string }>;
       importStatsFile: () => Promise<{ ok: boolean; error?: string }>;
+      getDoctorReport: () => Promise<DoctorReport>;
       onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
       onPlaySound: (callback: (dataUrl: string) => void) => () => void;
+      onOpenSection: (callback: (section: string) => void) => () => void;
     };
   }
 }

@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings, PermissionRequest, PermissionResponse, UpdateStatus } from "../shared/events";
+import type { CompanionConnectionStatus, CompanionEvent, CompanionSettings, DoctorReport, PermissionRequest, PermissionResponse, PluginMarketIndex, PluginRunRecord, SessionHistory, UpdateStatus } from "../shared/events";
 
 interface HooksStatus {
   installed: boolean;
@@ -52,18 +52,22 @@ declare global {
       getAppVersion: () => Promise<string>;
       getTokenStats: (force?: boolean) => Promise<import("../shared/events").TokenStats>;
       previewSound: (name: "done" | "error" | "permission" | "session-start") => Promise<{ ok: boolean; dataUrl?: string; error?: string }>;
+      getDefaultSoundPaths: () => Promise<Record<"done" | "error" | "permission" | "session-start", string>>;
+      previewSoundFile: (filePath: string) => Promise<{ ok: boolean; dataUrl?: string; error?: string }>;
       pickSoundFile: () => Promise<string | null>;
       triggerIdleBubble: () => Promise<void>;
       onTriggerIdleBubble: (callback: () => void) => () => void;
       syncIdleBubble: (sprite: string | null) => Promise<void>;
       onIdleBubbleSync: (callback: (sprite: string | null) => void) => () => void;
       getEventHistory: () => Promise<import("../shared/events").EventHistoryEntry[]>;
+      getSessionHistory: () => Promise<SessionHistory[]>;
       clearEventHistory: () => Promise<void>;
       exportEventHistoryFile: () => Promise<{ ok: boolean; error?: string }>;
       getMonitors: () => Promise<Array<{id: string; bounds: {x: number; y: number; width: number; height: number}; name: string; isPrimary: boolean}>>;
-      recordGif: () => Promise<{ok: boolean; message?: string}>;
-      saveGif: (dataUrl: string) => Promise<{ok: boolean; error?: string}>;
       getPlugins: () => Promise<import("../shared/events").CustomPlugin[]>;
+      getPluginRuns: () => Promise<PluginRunRecord[]>;
+      getPluginMarket: () => Promise<PluginMarketIndex>;
+      installMarketPlugin: (pluginId: string) => Promise<{ ok: boolean; plugin?: import("../shared/events").CustomPlugin; error?: string }>;
       savePlugins: (plugins: import("../shared/events").CustomPlugin[]) => Promise<import("../shared/events").CustomPlugin[]>;
       openExternal: (url: string) => Promise<void>;
       getStats: () => Promise<import("../shared/events").AppStats>;
@@ -72,8 +76,10 @@ declare global {
       importSettingsFile: () => Promise<{ ok: boolean; error?: string }>;
       exportStatsFile: () => Promise<{ ok: boolean; error?: string }>;
       importStatsFile: () => Promise<{ ok: boolean; error?: string }>;
+      getDoctorReport: () => Promise<DoctorReport>;
       onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
       onPlaySound: (callback: (dataUrl: string) => void) => () => void;
+      onOpenSection: (callback: (section: string) => void) => () => void;
     };
   }
 }

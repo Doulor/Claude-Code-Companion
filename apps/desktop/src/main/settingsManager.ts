@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { CompanionSettings } from "../shared/events";
-import { defaultSettings } from "../shared/events";
+import type { CompanionSettings } from "../shared/events.js";
+import { defaultSettings } from "../shared/events.js";
 
 const SETTINGS_VERSION = 1;
 
@@ -34,7 +34,7 @@ export function loadSettings(appDataDir: string): CompanionSettings {
 
     // Legacy format — wrap and save with version
     const legacyData = parsed as Partial<CompanionSettings>;
-    const merged = { ...defaultSettings, ...legacyData };
+    const merged = mergeWithDefaults(legacyData);
     saveSettings(appDataDir, merged);
     return merged;
   } catch (err) {
@@ -68,7 +68,7 @@ function migrateSettings(stored: StoredSettings, appDataDir: string): CompanionS
     migrated = true;
   }
 
-  const result = { ...defaultSettings, ...data };
+  const result = mergeWithDefaults(data);
 
   if (migrated) {
     const stored: StoredSettings = {
@@ -80,6 +80,18 @@ function migrateSettings(stored: StoredSettings, appDataDir: string): CompanionS
   }
 
   return result;
+}
+
+function mergeWithDefaults(data: Partial<CompanionSettings>): CompanionSettings {
+  return {
+    ...defaultSettings,
+    ...data,
+    positionOffsets: { ...defaultSettings.positionOffsets, ...(data.positionOffsets ?? {}) },
+    zoneSizes: data.zoneSizes ?? defaultSettings.zoneSizes,
+    sound: { ...defaultSettings.sound, ...(data.sound ?? {}) },
+    idleAnim: data.idleAnim ? { ...defaultSettings.idleAnim, ...data.idleAnim } : defaultSettings.idleAnim,
+    stateAnimations: { ...defaultSettings.stateAnimations, ...(data.stateAnimations ?? {}) }
+  };
 }
 
 function ensureDir(dir: string): void {

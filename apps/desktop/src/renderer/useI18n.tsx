@@ -29,6 +29,10 @@ function deepGet(obj: any, path: string): string | undefined {
 export function I18nProvider({ children, initialLocale = "zh" }: { children: React.ReactNode; initialLocale?: LocaleKey }) {
   const [locale, setLocaleState] = useState<LocaleKey>(initialLocale);
 
+  useEffect(() => {
+    setLocaleState(initialLocale);
+  }, [initialLocale]);
+
   const t = useCallback((path: string, fallback?: string) => {
     const msgs = locales[locale];
     const val = deepGet(msgs, path);

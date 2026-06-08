@@ -151,15 +151,19 @@ export interface CompanionSettings {
   openSettingsOnStart: boolean;
   autoStartWithCli: boolean;
   doneSound: boolean;
+  notificationsEnabled: boolean;
   theme: "light" | "dark" | "system";
   uiStyle: "classic" | "liquid";
-  language: "zh" | "en";
+  language: "auto" | "zh" | "en";
   autoStartDelay: number;
   autoStartMinimized: boolean;
   displayMonitorId: string;
   monitorPositions: MonitorPosition[];
   notificationRules: NotificationRule[];
   customPlugins: CustomPlugin[];
+  pomodoroEnabled: boolean;
+  pomodoroWorkMinutes: number;
+  pomodoroBreakMinutes: number;
   sound: SoundSettings;
   eventHistoryLimit: number;
   position?: { x: number; y: number };
@@ -172,6 +176,7 @@ export interface CompanionSettings {
     companion0?: { x: number; y: number };
     companion1?: { x: number; y: number };
     companion2?: { x: number; y: number };
+    pomodoro?: { x: number; y: number };
     view?: { x: number; y: number };
     gitToast?: { x: number; y: number };
   };
@@ -207,6 +212,7 @@ export interface SoundSettings {
   fileError: string | null;
   filePermission: string | null;
   fileSessionStart: string | null;
+  eventFiles?: Partial<Record<CompanionEventType, string | null>>;
 }
 
 export interface SessionTokenInfo {
@@ -283,12 +289,98 @@ export interface NotificationRule {
   showBubble: boolean;
 }
 
+export type PluginPermission = "event" | "network" | "filesystem" | "shell";
+
+export interface PluginManifest {
+  name?: string;
+  description?: string;
+  events: string[];
+  permissions: PluginPermission[];
+  timeoutMs?: number;
+}
+
+export interface PluginRunRecord {
+  id: string;
+  pluginId: string;
+  pluginName: string;
+  eventType: CompanionEventType;
+  startedAt: number;
+  durationMs: number;
+  exitCode: number | null;
+  timedOut: boolean;
+  stdout: string;
+  stderr: string;
+}
+
 export interface CustomPlugin {
   id: string;
   name: string;
   scriptPath: string;
   enabled: boolean;
   events: string[];
+  trusted?: boolean;
+  permissions?: PluginPermission[];
+  manifest?: PluginManifest;
+}
+
+export interface PluginMarketItem {
+  id: string;
+  name: string;
+  nameZh?: string;
+  description: string;
+  descriptionZh?: string;
+  detailsZh?: string;
+  author: string;
+  version: string;
+  entry: string;
+  manifest: string;
+  events: string[];
+  permissions: PluginPermission[];
+  tags: string[];
+}
+
+export interface PluginMarketIndex {
+  version: number;
+  updatedAt?: string;
+  plugins: PluginMarketItem[];
+}
+
+export interface SessionHistory {
+  sessionId: string;
+  title: string;
+  cwd?: string;
+  clientLabel?: string;
+  startedAt: number;
+  endedAt?: number;
+  lastEventAt: number;
+  eventCount: number;
+  status: "active" | "done" | "error";
+  events: EventHistoryEntry[];
+}
+
+export interface DoctorReport {
+  generatedAt: number;
+  appVersion: string;
+  connection: CompanionConnectionStatus;
+  hooks: {
+    installed: boolean;
+    configExists: boolean;
+    hookCount: number;
+    requiredCount: number;
+    missingEvents: string[];
+    commandMatches: boolean;
+  };
+  forwarder: {
+    expectedPath: string;
+    exists: boolean;
+    autoStartMarkerPath: string;
+    autoStartMarkerExists: boolean;
+  };
+  recent: {
+    lastEventAt?: number;
+    lastEventTitle?: string;
+    lastError?: string;
+  };
 }
 
 export interface MonitorPosition {
@@ -324,60 +416,72 @@ export const defaultSettings: CompanionSettings = {
   petScale: 1,
   viewScale: 1,
   petOpacity: 1,
-  clawdScale: 0.7964601769911505,
+  clawdScale: 0.8,
   clawdOpacity: 1,
-  thoughtScale: 0.7641509433962264,
+  thoughtScale: 0.75,
   thoughtOpacity: 1,
-  cardScale: 0.7641509433962264,
+  cardScale: 0.75,
   cardOpacity: 1,
   bubbleScale: 1,
   bubbleOpacity: 1,
   bubbleDuration: 8,
-  permissionScale: 0.85,
+  permissionScale: 0.9,
   permissionOpacity: 1,
   toolStreamMinDuration: 0.8,
   showStatusProp: true,
   multiSessionEnabled: false,
   showSessionTitle: true,
-  companionScale: 0.6,
+  companionScale: 0.5,
   companionIdleAnimations: ["thinking", "idle", "waiting_permission"],
   mainClawdIdleAnimation: "random",
   launchAtLogin: false,
   openSettingsOnStart: true,
   autoStartWithCli: false,
   doneSound: false,
+  notificationsEnabled: true,
   theme: "system",
   uiStyle: "classic",
-  language: "zh",
+  language: "auto",
   autoStartDelay: 0,
   autoStartMinimized: false,
   displayMonitorId: "",
   monitorPositions: [],
-  notificationRules: [],
+  notificationRules: [
+    { eventType: "session_start", enabled: true, systemNotification: false, playSound: true, showBubble: true },
+    { eventType: "done", enabled: true, systemNotification: false, playSound: true, showBubble: true },
+    { eventType: "error", enabled: true, systemNotification: false, playSound: true, showBubble: true },
+    { eventType: "permission_wait", enabled: true, systemNotification: false, playSound: true, showBubble: true }
+  ],
   customPlugins: [],
+  pomodoroEnabled: false,
+  pomodoroWorkMinutes: 25,
+  pomodoroBreakMinutes: 5,
   sound: {
     enabled: true,
     volume: 0.5,
     onDone: true,
     onError: true,
-    onPermission: false,
-    onSessionStart: false,
+    onPermission: true,
+    onSessionStart: true,
     fileDone: null,
     fileError: null,
     filePermission: null,
-    fileSessionStart: null
+    fileSessionStart: null,
+    eventFiles: {}
   },
   eventHistoryLimit: 40,
   positionOffsets: {
-    clawd: { x: 200, y: -50 },
-    bubble: { x: 220, y: -30 },
-    ribbon: { x: 170, y: -70 },
-    permission: { x: 150, y: -10 },
-    companion: { x: 40, y: -100 },
-    companion0: { x: 40, y: -100 },
-    companion1: { x: 100, y: -160 },
-    companion2: { x: 160, y: -220 },
-    view: { x: 0, y: 0 }
+    clawd: { x: 707, y: -61 },
+    bubble: { x: 708, y: -45 },
+    ribbon: { x: 677, y: -80 },
+    permission: { x: 678, y: -173 },
+    companion: { x: 80, y: -120 },
+    companion0: { x: 587, y: 37 },
+    companion1: { x: 497, y: 37 },
+    companion2: { x: 408, y: 37 },
+    pomodoro: { x: 735, y: -5 },
+    view: { x: 41, y: -13 },
+    gitToast: { x: 682, y: 52 }
   },
   zoneSizes: {},
   idleAnim: {

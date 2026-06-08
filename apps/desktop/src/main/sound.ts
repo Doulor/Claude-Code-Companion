@@ -10,7 +10,7 @@ const appRoot = app.getAppPath();
 const devSoundDir = join(appRoot, "build", "sounds");
 const prodSoundDir = join(process.resourcesPath, "build", "sounds");
 
-function builtInPath(name: "done" | "error" | "permission" | "session-start"): string {
+export function builtInPath(name: "done" | "error" | "permission" | "session-start"): string {
   const file = `${name}.wav`;
   const devPath = join(devSoundDir, file);
   if (existsSync(devPath)) return devPath;
@@ -37,7 +37,12 @@ function resolveFile(override: string | null, name: "done" | "error" | "permissi
 const dataUrlCache = new Map<string, string>();
 const MAX_CACHE = 8;
 
-function fileToDataUrl(path: string): string | null {
+function isAudioPath(path: string): boolean {
+  return /\.(wav|mp3|ogg|flac)$/i.test(path);
+}
+
+export function fileToDataUrl(path: string): string | null {
+  if (!isAudioPath(path)) return null;
   const cached = dataUrlCache.get(path);
   if (cached) {
     // Move to end (most recently used)
@@ -66,14 +71,17 @@ function fileToDataUrl(path: string): string | null {
 /** Resolve sound file for an event and return its data URL (for renderer Audio playback) */
 export function getSoundDataUrl(event: string, settings: SoundSettings): string | null {
   if (!settings.enabled) return null;
+  const eventOverride = settings.eventFiles?.[event as keyof NonNullable<SoundSettings["eventFiles"]>] ?? null;
   let file: string | null = null;
-  if (event === "done" && settings.onDone) {
+  if (eventOverride) {
+    file = resolveFile(eventOverride, "done");
+  } else if (event === "done") {
     file = resolveFile(settings.fileDone, "done");
-  } else if (event === "error" && settings.onError) {
+  } else if (event === "error") {
     file = resolveFile(settings.fileError, "error");
-  } else if (event === "permission_wait" && settings.onPermission) {
+  } else if (event === "permission_wait") {
     file = resolveFile(settings.filePermission, "permission");
-  } else if (event === "session_start" && settings.onSessionStart) {
+  } else if (event === "session_start") {
     file = resolveFile(settings.fileSessionStart, "session-start");
   }
   if (!file) return null;

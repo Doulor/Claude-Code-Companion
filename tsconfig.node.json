@@ -11,5 +11,5 @@
     "rootDir": "apps/desktop/src",
     "types": ["node"]
   },
-  "include": ["apps/desktop/src/main/index.ts", "apps/desktop/src/shared"]
+  "include": ["apps/desktop/src/main", "apps/desktop/src/shared"]
 }

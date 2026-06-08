@@ -1,6 +1,6 @@
 {
   "name": "clawd-companion",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "private": true,
   "description": "Clawd Companion - Real-time Claude Code desktop companion showing tool calls and session status",
   "author": "Doulor",
@@ -18,7 +18,7 @@
     "version:patch": "node scripts/bump-version.mjs patch",
     "version:minor": "node scripts/bump-version.mjs minor",
     "version:major": "node scripts/bump-version.mjs major",
-    "test": "vitest run --root apps/hook-forwarder",
+    "test": "vitest run --root apps/hook-forwarder && vitest run --root apps/desktop",
     "test:watch": "vitest --root apps/hook-forwarder"
   },
   "main": "dist/main/index.js",
@@ -41,6 +41,10 @@
       {
         "from": "dist/hook-forwarder",
         "to": "hook-forwarder"
+      },
+      {
+        "from": "plugin-market",
+        "to": "plugin-market"
       }
     ],
     "win": {
