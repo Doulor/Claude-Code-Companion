@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bot, CircleAlert, CircleCheck, CircleX, PlugZap, Sparkles } from "lucide-react";
+import { Bot, PlugZap, Sparkles } from "lucide-react";
 import { useI18n } from "../useI18n";
 
 interface ProviderStatus {
@@ -89,7 +89,11 @@ export function SourcesPanel() {
           <div key={id} className="source-card">
             <StatusCard
               icon={<meta.Icon size={18} />}
-              label={formatText(t("doctor.statusLabel", "{provider} 状态"), { provider: meta.label })}
+              label={
+                id === "codex"
+                  ? <><span>{formatText(t("doctor.statusLabel", "{provider} 状态"), { provider: meta.label })}</span><sup className="beta-badge">{t("behavior.testing", "测试中")}</sup></>
+                  : formatText(t("doctor.statusLabel", "{provider} 状态"), { provider: meta.label })
+              }
               value={
                 status.installed
                   ? formatText(t("hooks.installedToProvider", "已安装到 {provider}"), { provider: meta.label })
@@ -135,7 +139,7 @@ export function SourcesPanel() {
   );
 }
 
-function StatusCard({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: string; tone: "good" | "bad" | "wait" | "neutral" }) {
+function StatusCard({ icon, label, value, tone }: { icon: React.ReactNode; label: React.ReactNode; value: string; tone: "good" | "bad" | "wait" | "neutral" }) {
   return (
     <article className={`status-card ${tone}`}>
       {icon}

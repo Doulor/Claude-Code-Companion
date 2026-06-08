@@ -29,9 +29,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 function resolveCoreEntry(): string {
-  // Dev layout: <project>/dist/hook-forwarder-codex/index.js → sibling ../../hook-forwarder-core/index.js
-  // Prod layout: <install>/resources/hook-forwarder-codex/index.js → sibling
-  return join(__dirname, "../../hook-forwarder-core/index.js");
+  // Dev layout: dist/hook-forwarder-codex/index.js → ../hook-forwarder-core/index.js
+  // Prod layout: resources/hook-forwarder-codex/index.js → ../hook-forwarder-core/index.js
+  return join(__dirname, "../hook-forwarder-core/index.js");
 }
 
 let corePromise: Promise<CoreExports> | null = null;
