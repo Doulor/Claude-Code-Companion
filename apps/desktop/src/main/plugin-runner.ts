@@ -14,7 +14,9 @@ export function readPluginManifest(scriptPath: string): PluginManifest | null {
   const parsed = JSON.parse(readFileSync(manifestPath, "utf8")) as Partial<PluginManifest>;
   return {
     name: typeof parsed.name === "string" ? parsed.name : undefined,
+    nameZh: typeof parsed.nameZh === "string" ? parsed.nameZh : undefined,
     description: typeof parsed.description === "string" ? parsed.description : undefined,
+    descriptionZh: typeof parsed.descriptionZh === "string" ? parsed.descriptionZh : undefined,
     events: Array.isArray(parsed.events) ? parsed.events.filter((v): v is string => typeof v === "string") : [],
     permissions: Array.isArray(parsed.permissions) ? parsed.permissions.filter(isPluginPermission) : [],
     timeoutMs: typeof parsed.timeoutMs === "number" ? parsed.timeoutMs : undefined,

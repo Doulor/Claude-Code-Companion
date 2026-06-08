@@ -335,7 +335,9 @@ export interface PluginWidgetDescriptor {
 
 export interface PluginManifest {
   name?: string;
+  nameZh?: string;
   description?: string;
+  descriptionZh?: string;
   events: string[];
   permissions: PluginPermission[];
   timeoutMs?: number;

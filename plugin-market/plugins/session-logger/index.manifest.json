@@ -2,6 +2,7 @@
   "name": "Session Logger",
   "nameZh": "会话日志",
   "description": "Logs Clawd events to a local file with configurable format.",
+  "descriptionZh": "将 Clawd 事件记录到本地文件，支持自定义格式。",
   "events": ["session_start", "done", "error", "tool_start", "tool_end"],
   "permissions": ["filesystem"],
   "timeoutMs": 5000,

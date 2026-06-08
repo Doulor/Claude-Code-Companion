@@ -25,7 +25,7 @@ import {
   Wrench,
   X
 } from "lucide-react";
-import type { CompanionEvent, CompanionSettings, CompanionSession, FeedbackMode, IdleAnimConfig, PetState, PrivacyMode, PermissionRequest, ToolName, UpdateStatus } from "../shared/events";
+import type { CompanionEvent, CompanionSettings, CompanionSession, FeedbackMode, IdleAnimConfig, PetState, PrivacyMode, PermissionRequest, PluginWidgetDescriptor, ToolName, UpdateStatus } from "../shared/events";
 import { defaultSettings, stateFromEvent, type EventHistoryEntry, type NotificationRule, type CustomPlugin, type MonitorPosition } from "../shared/events";
 import clawdImage from "./clawd.png";
 import "./clawd-sprites/sprites.css";
@@ -36,9 +36,9 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { SessionStatsDashboard } from "./components/SessionStatsDashboard";
 import { TimelinePanel } from "./components/TimelinePanel";
-import { PluginManagerPanel } from "./components/PluginManagerPanel";
-import { PluginMarketPanel } from "./components/PluginMarketPanel";
 import { PluginSpriteLoader } from "./components/PluginSpriteLoader";
+import { PluginsPage } from "./components/plugins/PluginsPage";
+import { PluginPomodoroWidget } from "./components/plugins/widgets/PluginPomodoroWidget";
 import { NotificationRulesPanel } from "./components/NotificationRulesPanel";
 import { MonitorSettings } from "./components/MonitorSettings";
 import { DoctorPanel } from "./components/DoctorPanel";
@@ -141,6 +141,22 @@ function makeEvent(event: CompanionEvent["event"], source: CompanionEvent["sourc
     message,
     timestamp: Date.now()
   };
+}
+
+type PluginWidgetInstance = {
+  plugin: CustomPlugin;
+  widget: PluginWidgetDescriptor;
+  widgetKey: string;
+};
+
+function getPluginWidgets(settings: CompanionSettings): PluginWidgetInstance[] {
+  return (settings.customPlugins ?? []).filter(plugin => plugin.enabled).flatMap(plugin =>
+    (plugin.manifest?.widgets ?? []).map(widget => ({ plugin, widget, widgetKey: widget.positionKey ?? widget.type }))
+  );
+}
+
+function getPluginWidgetOffset(settings: CompanionSettings, plugin: CustomPlugin, widgetKey: string): { x: number; y: number } {
+  return plugin.widgetOffsets?.[widgetKey] ?? settings.positionOffsets?.pomodoro ?? defaultSettings.positionOffsets?.pomodoro ?? { x: 735, y: -5 };
 }
 
 function PetApp() {
@@ -265,7 +281,7 @@ function PetApp() {
       const handle = (e: MouseEvent) => {
         if (dragging.current) return;
         const target = e.target as HTMLElement;
-        void window.companion.setPetInteractive(!!target.closest('.perm-card, .pomodoro-widget'));
+        void window.companion.setPetInteractive(!!target.closest('.perm-card, .plugin-widget, .pomodoro-widget'));
       };
       window.addEventListener('mousemove', handle);
       return () => {
@@ -277,7 +293,7 @@ function PetApp() {
     const handle = (e: MouseEvent) => {
       if (dragging.current) return;
       const target = e.target as HTMLElement;
-      void window.companion.setPetInteractive(!!target.closest('.clawd, .bubble-wrapper, .tool-streams, .permission-card-wrapper, .perm-card, .pomodoro-widget'));
+      void window.companion.setPetInteractive(!!target.closest('.clawd, .bubble-wrapper, .tool-streams, .permission-card-wrapper, .perm-card, .plugin-widget, .pomodoro-widget'));
     };
     window.addEventListener('mousemove', handle);
     return () => {
@@ -314,6 +330,15 @@ function PetApp() {
         const ny = oy + e.clientY - my;
         const p = offsetsRef.current;
         updateSettings({ positionOffsets: { ...p, view: { x: nx, y: ny } } });
+      } else if (key.startsWith("pluginWidget:")) {
+        const [, pluginId, widgetKey] = key.split(":");
+        const nx = ox + e.clientX - mx;
+        const ny = oy + e.clientY - my;
+        updateSettings({
+          customPlugins: (settings.customPlugins ?? []).map(plugin => plugin.id === pluginId
+            ? { ...plugin, widgetOffsets: { ...(plugin.widgetOffsets ?? {}), [widgetKey]: { x: nx, y: ny } } }
+            : plugin)
+        });
       } else {
         const nx = ox + e.clientX - mx;
         const ny = oy + e.clientY - my;
@@ -325,7 +350,7 @@ function PetApp() {
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
     return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
-  }, []);
+  }, [settings.customPlugins]);
 
   useEffect(() => { offsetsRef.current = settings.positionOffsets ?? {}; }, [settings.positionOffsets]);
   useEffect(() => { scaleRef.current = { clawd: settings.clawdScale, bubble: settings.thoughtScale, ribbon: settings.bubbleScale, permission: settings.permissionScale }; }, [settings.clawdScale, settings.thoughtScale, settings.bubbleScale, settings.permissionScale]);
@@ -347,6 +372,7 @@ function PetApp() {
 
   const offsets = settings.positionOffsets ?? {};
   const viewOff = offsets.view ?? { x: 0, y: 0 };
+  const pluginWidgets = getPluginWidgets(settings);
 
   function begin(k: string, e: React.MouseEvent) {
     if (!editMode) return;
@@ -354,9 +380,22 @@ function PetApp() {
     dragging.current = k;
     if (k === "view") {
       dragStart.current = { mx: e.clientX, my: e.clientY, ox: viewOff.x, oy: viewOff.y };
+    } else if (k.startsWith("pluginWidget:")) {
+      const [, pluginId, widgetKey] = k.split(":");
+      const plugin = (settings.customPlugins ?? []).find(item => item.id === pluginId);
+      const current = plugin ? getPluginWidgetOffset(settings, plugin, widgetKey) : { x: 0, y: 0 };
+      dragStart.current = { mx: e.clientX, my: e.clientY, ox: current.x, oy: current.y };
     } else {
       dragStart.current = { mx: e.clientX, my: e.clientY, ox: offsets[k as keyof typeof offsets]?.x ?? 0, oy: offsets[k as keyof typeof offsets]?.y ?? 0 };
     }
+  }
+
+  function beginPluginWidgetDrag(pluginId: string, widgetKey: string, e: React.MouseEvent | React.PointerEvent) {
+    e.stopPropagation();
+    const plugin = (settings.customPlugins ?? []).find(item => item.id === pluginId);
+    const current = plugin ? getPluginWidgetOffset(settings, plugin, widgetKey) : { x: 0, y: 0 };
+    dragging.current = `pluginWidget:${pluginId}:${widgetKey}`;
+    dragStart.current = { mx: e.clientX, my: e.clientY, ox: current.x, oy: current.y };
   }
 
   function beginResize(k: string, e: React.MouseEvent) {
@@ -374,6 +413,8 @@ function PetApp() {
 
   function beginNormalDrag(e: React.MouseEvent) {
     if (editMode || settings.clickThrough) return;
+    const target = e.target as HTMLElement;
+    if (target.closest(".plugin-widget, .pomodoro-widget, button, input, select, textarea")) return;
     dragging.current = "pet";
     dragStart.current = { mx: e.clientX, my: e.clientY, ox: viewOff.x, oy: viewOff.y };
   }
@@ -430,19 +471,21 @@ function PetApp() {
                 />
               </div>
             ) : null}
-            {settings.pomodoroEnabled ? <PomodoroWidget settings={settings} preview /> : null}
+            {pluginWidgets.map(({ plugin, widget, widgetKey }) => widget.type === "pomodoro" ? (
+              <PluginPomodoroWidget key={`${plugin.id}:${widgetKey}:preview`} plugin={plugin} offset={getPluginWidgetOffset(settings, plugin, widgetKey)} preview />
+            ) : null)}
           </div>
-          {settings.pomodoroEnabled ? (
-            <div className="edit-zone edit-zone-pomodoro"
+          {pluginWidgets.map(({ plugin, widget, widgetKey }) => widget.type === "pomodoro" ? (
+            <div key={`${plugin.id}:${widgetKey}`} className="edit-zone edit-zone-pomodoro edit-zone-plugin-widget"
               style={{
-                transform: `translate(${offsets.pomodoro?.x ?? 0}px, ${offsets.pomodoro?.y ?? 0}px)`,
-                width: 172,
-                height: 78
+                transform: `translate(${getPluginWidgetOffset(settings, plugin, widgetKey).x}px, ${getPluginWidgetOffset(settings, plugin, widgetKey).y}px)`,
+                width: widget.width ?? 172,
+                height: widget.height ?? 78
               }}
-              onMouseDown={e => begin("pomodoro", e)}>
-              <span className="edit-zone-label">番茄钟</span>
+              onMouseDown={e => begin(`pluginWidget:${plugin.id}:${widgetKey}`, e)}>
+              <span className="edit-zone-label">{widget.label ?? plugin.name}</span>
             </div>
-          ) : null}
+          ) : null)}
           <div className="edit-zone edit-zone-clawd"
             style={{
               left: Math.round((226 - cw) / 2),
@@ -553,7 +596,9 @@ function PetApp() {
           <ToolStreams streams={toolStreams} offset={offsets.ribbon} />
         ) : null}
 
-        {settings.pomodoroEnabled ? <PomodoroWidget settings={settings} /> : null}
+        {pluginWidgets.map(({ plugin, widget, widgetKey }) => widget.type === "pomodoro" ? (
+          <PluginPomodoroWidget key={`${plugin.id}:${widgetKey}`} plugin={plugin} offset={getPluginWidgetOffset(settings, plugin, widgetKey)} onBeginDrag={e => beginPluginWidgetDrag(plugin.id, widgetKey, e)} />
+        ) : null)}
 
         {settings.multiSessionEnabled && mainSessionId && sessions
             .filter(s => s.sessionId !== mainSessionId && (s.isActive || exitingSessions.has(s.sessionId)))
@@ -569,57 +614,6 @@ function PetApp() {
           ))}
       </section>
     </main>
-  );
-}
-
-function PomodoroWidget({ settings, preview = false }: { settings: CompanionSettings; preview?: boolean }) {
-  const { t } = useI18n();
-  const workSeconds = Math.max(1, Math.round((settings.pomodoroWorkMinutes ?? 25) * 60));
-  const breakSeconds = Math.max(1, Math.round((settings.pomodoroBreakMinutes ?? 5) * 60));
-  const [mode, setMode] = useState<"work" | "break">("work");
-  const [remaining, setRemaining] = useState(workSeconds);
-  const [running, setRunning] = useState(false);
-
-  useEffect(() => {
-    if (mode === "work") setRemaining(workSeconds);
-    else setRemaining(breakSeconds);
-  }, [workSeconds, breakSeconds, mode]);
-
-  useEffect(() => {
-    if (!running || preview) return;
-    const timer = window.setInterval(() => {
-      setRemaining(value => {
-        if (value > 1) return value - 1;
-        const nextMode = mode === "work" ? "break" : "work";
-        setMode(nextMode);
-        return nextMode === "work" ? workSeconds : breakSeconds;
-      });
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [running, preview, mode, workSeconds, breakSeconds]);
-
-  const total = mode === "work" ? workSeconds : breakSeconds;
-  const progress = Math.max(0, Math.min(1, 1 - remaining / total));
-  const minutes = Math.floor(remaining / 60).toString().padStart(2, "0");
-  const seconds = Math.floor(remaining % 60).toString().padStart(2, "0");
-  const offsets = settings.positionOffsets ?? {};
-
-  return (
-    <section className={`pomodoro-widget ${mode} ${preview ? "preview" : ""}`} style={{ transform: `translate(${offsets.pomodoro?.x ?? 0}px, ${offsets.pomodoro?.y ?? 0}px)` }} onMouseDown={e => e.stopPropagation()}>
-      <div className="pomodoro-ring" style={{ background: `conic-gradient(var(--coral) ${progress * 360}deg, rgba(255,255,255,.42) 0deg)` }}>
-        <span>{mode === "work" ? "25" : "5"}</span>
-      </div>
-      <div className="pomodoro-main">
-        <strong>{minutes}:{seconds}</strong>
-        <small>{mode === "work" ? t("pomodoro.focus", "专注中") : t("pomodoro.break", "休息中")}</small>
-      </div>
-      {!preview ? (
-        <div className="pomodoro-actions">
-          <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setRunning(value => !value); }}>{running ? t("common.pause", "暂停") : t("common.start", "开始")}</button>
-          <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setRunning(false); setMode("work"); setRemaining(workSeconds); }}>{t("common.reset", "重置")}</button>
-        </div>
-      ) : null}
-    </section>
   );
 }
 
@@ -1303,16 +1297,6 @@ function SettingsApp() {
             <NotificationRulesPanel settings={settings} updateSettings={updateSettings} />
           </GroupCard>
 
-          <GroupCard icon={<Timer size={18} />} title={t("sections.pomodoro", "番茄钟")}>
-            <Toggle label={t("pomodoro.enable", "显示番茄钟")} checked={settings.pomodoroEnabled} onChange={pomodoroEnabled => updateSettings({ pomodoroEnabled })} />
-            {settings.pomodoroEnabled ? (
-              <div className="section-grid-2col compact-grid">
-                <Slider label={t("pomodoro.workMinutes", "专注时长")} min={5} max={60} step={5} value={settings.pomodoroWorkMinutes} format={v => `${v} ${t("common.minutes", "分钟")}`} onChange={pomodoroWorkMinutes => updateSettings({ pomodoroWorkMinutes })} />
-                <Slider label={t("pomodoro.breakMinutes", "休息时长")} min={1} max={20} step={1} value={settings.pomodoroBreakMinutes} format={v => `${v} ${t("common.minutes", "分钟")}`} onChange={pomodoroBreakMinutes => updateSettings({ pomodoroBreakMinutes })} />
-              </div>
-            ) : null}
-          </GroupCard>
-
           <GroupCard icon={<Timer size={18} />} title={t("sections.time", "时间")}>
             <Slider label={t("behavior.bubbleStay", "气泡停留")} min={3} max={18} step={1} value={settings.bubbleDuration} format={v => `${v} ${t("common.seconds", "秒")}`} onChange={bubbleDuration => updateSettings({ bubbleDuration })} />
             <Slider label={t("behavior.toolStreamStay", "工具流停留")} min={0.3} max={3} step={0.1} value={settings.toolStreamMinDuration} format={v => `${v.toFixed(1)} ${t("common.seconds", "秒")}`} onChange={toolStreamMinDuration => updateSettings({ toolStreamMinDuration })} />
@@ -1327,10 +1311,7 @@ function SettingsApp() {
           </GroupCard>
         </>}
 
-        {activeSection === "plugins" && <>
-          <PluginMarketPanel installedPluginIds={(settings.customPlugins ?? []).map((plugin: CustomPlugin) => plugin.id)} onInstalled={async () => updateSettings({ customPlugins: await window.companion.getPlugins() } as any)} />
-          <PluginManagerPanel settings={settings} updateSettings={updateSettings} />
-        </>}
+        {activeSection === "plugins" && <PluginsPage settings={settings} updateSettings={updateSettings} />}
 
         {activeSection === "animation" && <>
           <GroupCard icon={<Sparkles size={18} />} title={t("sections.idleAnimation", "待机动画")}>

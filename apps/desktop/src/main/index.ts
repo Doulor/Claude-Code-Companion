@@ -43,6 +43,8 @@ let settingsWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let settings: CompanionSettings = defaultSettings;
 let eventServer: ReturnType<typeof createServer> | null = null;
+let petWidgetHitTestTimer: NodeJS.Timeout | null = null;
+let petWidgetHitTestInteractive = false;
 let wsServer: WebSocketServer | null = null;
 let serverListening = false;
 let serverError: string | undefined;
@@ -283,6 +285,46 @@ function keepPetOnTop() {
   }
 }
 
+function startPetWidgetHitTesting() {
+  if (petWidgetHitTestTimer) clearInterval(petWidgetHitTestTimer);
+  petWidgetHitTestTimer = setInterval(() => {
+    if (!petWindow || petWindow.isDestroyed() || !settings.petEnabled) return;
+    const shouldInteract = isMouseOverPluginWidget();
+    if (shouldInteract && !petWidgetHitTestInteractive) {
+      petWidgetHitTestInteractive = true;
+      petWindow.setIgnoreMouseEvents(false, { forward: true });
+    } else if (!shouldInteract && petWidgetHitTestInteractive) {
+      petWidgetHitTestInteractive = false;
+      petWindow.setIgnoreMouseEvents(true, { forward: true });
+    }
+  }, 80);
+}
+
+function isMouseOverPluginWidget(): boolean {
+  if (!petWindow || petWindow.isDestroyed()) return false;
+  if (settings.editPosition) return false;
+  const point = screen.getCursorScreenPoint();
+  const display = screen.getPrimaryDisplay().bounds;
+  const view = settings.positionOffsets?.view ?? { x: 0, y: 0 };
+  const scale = settings.petScale ?? 1;
+  const anchorLeft = display.x + display.width / 2 - (226 * scale) / 2 + view.x * scale;
+  const anchorBottom = display.y + display.height + view.y * scale;
+  for (const plugin of settings.customPlugins ?? []) {
+    if (!plugin.enabled) continue;
+    for (const widget of plugin.manifest?.widgets ?? []) {
+      if (widget.type !== "pomodoro") continue;
+      const key = widget.positionKey ?? widget.type;
+      const offset = plugin.widgetOffsets?.[key] ?? settings.positionOffsets?.pomodoro ?? { x: 735, y: -5 };
+      const width = (widget.width ?? 172) * scale;
+      const height = (widget.height ?? 78) * scale;
+      const left = anchorLeft + offset.x * scale;
+      const top = anchorBottom - height + offset.y * scale;
+      if (point.x >= left - 12 && point.x <= left + width + 12 && point.y >= top - 18 && point.y <= top + height + 12) return true;
+    }
+  }
+  return false;
+}
+
 function createPetWindow() {
   const size = petWindowSize();
   // 窗口始终覆盖整个主屏幕，(0,0) 为基准，所有定位由 CSS view offset 控制
@@ -310,6 +352,7 @@ function createPetWindow() {
 
   wireWindowDiagnostics(petWindow, "pet");
   petWindow.setIgnoreMouseEvents(true, { forward: true });
+  startPetWidgetHitTesting();
   keepPetOnTop();
   petWindow.on("focus", keepPetOnTop);
   petWindow.on("show", keepPetOnTop);

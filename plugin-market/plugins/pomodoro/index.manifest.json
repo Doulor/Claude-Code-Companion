@@ -1,6 +1,8 @@
 {
   "name": "Pomodoro",
+  "nameZh": "番茄钟",
   "description": "A desktop Pomodoro timer widget rendered by Clawd Companion.",
+  "descriptionZh": "显示在桌面 Clawd 旁边的专注计时器组件。",
   "events": [],
   "permissions": [],
   "widgets": [
@@ -26,8 +28,15 @@
       "max": 20,
       "step": 1,
       "description": "Minutes per break session"
+    },
+    {
+      "key": "enableDragHandle",
+      "label": "Show drag handle",
+      "type": "toggle",
+      "default": true,
+      "description": "Show a dotted handle at the top of the timer for quick dragging"
     }
   ],
-  "readme": "# Pomodoro\n\nA lightweight focus timer shown directly on your desktop next to Clawd.\n\n## How to use\n\n- Enable the plugin to show the widget.\n- Configure **Focus duration** and **Break duration** in this plugin page.\n- Use the widget buttons to start, pause, or reset the current round.\n- Turn on edit-position mode in Appearance to drag the widget to your preferred location.\n\n## Safety\n\nThis is a widget-only plugin. It does not listen to Claude Code events and does not require script permissions.",
-  "readmeZh": "# 番茄钟\n\n一个显示在桌面 Clawd 旁边的轻量专注计时器。\n\n## 如何使用\n\n- 启用插件即可显示番茄钟组件。\n- 在本插件详情页配置 **专注时长** 和 **休息时长**。\n- 在桌面组件上点击开始、暂停或重置当前轮次。\n- 到「外观」中打开位置编辑模式，可以拖动番茄钟到你喜欢的位置。\n\n## 安全说明\n\n这是一个纯组件插件。它不监听 Claude Code 事件，也不需要脚本权限。"
+  "readme": "# Pomodoro\n\nA lightweight focus timer shown directly on your desktop next to Clawd.\n\n## How to use\n\n- Enable the plugin to show the widget.\n- Configure **Focus duration** and **Break duration** in this plugin page.\n- Use the widget buttons to start, pause, or reset the current round.\n- If **Show drag handle** is enabled, use the dotted handle above the timer to drag it quickly.\n- You can also turn on edit-position mode in Appearance for precise placement.\n\n## Safety\n\nThis is a widget-only plugin. It does not listen to Claude Code events and does not require script permissions.",
+  "readmeZh": "# 番茄钟\n\n一个显示在桌面 Clawd 旁边的轻量专注计时器。\n\n## 如何使用\n\n- 启用插件即可显示番茄钟组件。\n- 在本插件详情页配置 **专注时长** 和 **休息时长**。\n- 在桌面组件上点击开始、暂停或重置当前轮次。\n- 如果开启 **显示拖动点**，番茄钟顶部会出现点阵小把手，可以直接拖动调整位置。\n- 也可以到「外观」中打开位置编辑模式，更精确地调整番茄钟位置。\n\n## 安全说明\n\n这是一个纯组件插件。它不监听 Claude Code 事件，也不需要脚本权限。"
 }
