@@ -51,4 +51,25 @@ describe("settings manager", () => {
     expect(stored.version).toBe(1);
     expect(stored.data.port).toBe(23456);
   });
+
+  it("migrates legacy settings by filling enabledSources with the default", () => {
+    const dir = tempDir();
+    writeFileSync(join(dir, "settings.json"), JSON.stringify({ port: 12345 }));
+
+    const loaded = loadSettings(dir);
+
+    expect(loaded.enabledSources).toEqual(["claude-code"]);
+  });
+
+  it("filters out unknown sources and re-orders to the canonical order", () => {
+    const dir = tempDir();
+    writeFileSync(
+      join(dir, "settings.json"),
+      JSON.stringify({ version: 1, data: { enabledSources: ["codex", "unknown-cli", "claude-code"] } })
+    );
+
+    const loaded = loadSettings(dir);
+
+    expect(loaded.enabledSources).toEqual(["claude-code", "codex"]);
+  });
 });

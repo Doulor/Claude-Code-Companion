@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import type { CompanionSettings } from "../shared/events.js";
-import { defaultSettings } from "../shared/events.js";
+import type { CompanionSettings, ProviderId } from "../shared/events.js";
+import { defaultSettings, PROVIDER_IDS } from "../shared/events.js";
 import { readJsonWithBackup, writeJsonAtomic } from "./atomic-json.js";
 
 const SETTINGS_VERSION = 1;
@@ -95,8 +95,17 @@ function mergeWithDefaults(data: Partial<CompanionSettings>): CompanionSettings 
     zoneSizes: data.zoneSizes ?? defaultSettings.zoneSizes,
     sound: { ...defaultSettings.sound, ...(data.sound ?? {}) },
     idleAnim: data.idleAnim ? { ...defaultSettings.idleAnim, ...data.idleAnim } : defaultSettings.idleAnim,
-    stateAnimations: { ...defaultSettings.stateAnimations, ...(data.stateAnimations ?? {}) }
+    stateAnimations: { ...defaultSettings.stateAnimations, ...(data.stateAnimations ?? {}) },
+    enabledSources: normalizeEnabledSources(data.enabledSources)
   });
+}
+
+function normalizeEnabledSources(value: unknown): ProviderId[] {
+  if (!Array.isArray(value)) return [...defaultSettings.enabledSources];
+  const filtered = value.filter((entry): entry is ProviderId => typeof entry === "string" && (PROVIDER_IDS as readonly string[]).includes(entry));
+  if (filtered.length === 0) return [...defaultSettings.enabledSources];
+  // Preserve the default order so the UI is stable.
+  return PROVIDER_IDS.filter((id) => filtered.includes(id));
 }
 
 function withGeneratedToken(settings: CompanionSettings): CompanionSettings {

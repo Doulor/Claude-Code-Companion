@@ -45,6 +45,11 @@ export type ToolName =
   | "TaskUpdate"
   | "AskUserQuestion"
   | "MCP"
+  // Codex-specific tools (no-op for Claude-Code-only users)
+  | "Shell"
+  | "UpdatePlan"
+  | "ApplyPatch"
+  | "ViewImage"
   | "Unknown";
 
 export type CompanionEventType =
@@ -79,6 +84,10 @@ export type FeedbackMode = "thought" | "card" | "ribbon";
 
 export type ClientType = "cli" | "desktop" | "vscode" | "unknown";
 
+export type ProviderId = "claude-code" | "codex";
+
+export const PROVIDER_IDS: ProviderId[] = ["claude-code", "codex"];
+
 export type PermissionDecision = "allow" | "deny";
 
 export interface PermissionRequest {
@@ -104,7 +113,7 @@ export interface PermissionResponse {
 
 export interface CompanionEvent {
   id: string;
-  source: "claude-code" | "cc-haha" | "manual";
+  source: ProviderId | "cc-haha" | "manual";
   event: CompanionEventType;
   sessionId?: string;
   clientType?: ClientType;
@@ -151,6 +160,7 @@ export interface CompanionSettings {
   openSettingsOnStart: boolean;
   autoStartWithCli: boolean;
   autoUpdateEnabled: boolean;
+  enabledSources: ProviderId[];
   doneSound: boolean;
   notificationsEnabled: boolean;
   theme: "light" | "dark" | "system";
@@ -450,6 +460,7 @@ export const defaultSettings: CompanionSettings = {
   openSettingsOnStart: false,
   autoStartWithCli: false,
   autoUpdateEnabled: true,
+  enabledSources: ["claude-code"],
   doneSound: false,
   notificationsEnabled: true,
   theme: "system",
@@ -519,13 +530,13 @@ export function stateFromEvent(event: CompanionEvent): PetState {
   if (event.event === "git_operation") return "thinking";
   if (event.event === "prompt_submit" || event.event === "session_start") return "thinking";
   if (event.event === "tool_start") {
-    if (event.tool === "Read" || event.tool === "Notebook") return "tool_read";
-    if (event.tool === "Edit" || event.tool === "Write") return "tool_edit";
-    if (event.tool === "Bash") return "tool_bash";
+    if (event.tool === "Read" || event.tool === "Notebook" || event.tool === "ViewImage") return "tool_read";
+    if (event.tool === "Edit" || event.tool === "Write" || event.tool === "ApplyPatch") return "tool_edit";
+    if (event.tool === "Bash" || event.tool === "Shell") return "tool_bash";
     if (event.tool === "Grep" || event.tool === "Glob" || event.tool === "WebFetch" || event.tool === "WebSearch") return "tool_search";
     if (event.tool === "MCP") return "tool_mcp";
     if (event.tool === "Skill") return "skill";
-    if (event.tool === "Task" || event.tool === "TaskCreate" || event.tool === "TaskUpdate") return "task";
+    if (event.tool === "Task" || event.tool === "TaskCreate" || event.tool === "TaskUpdate" || event.tool === "UpdatePlan") return "task";
     if (event.tool === "Agent") return "agent";
     return "thinking";
   }

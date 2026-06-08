@@ -31,10 +31,17 @@ describe("event server validation", () => {
   });
 
   it("falls back to Unknown for invalid tool names", () => {
-    const parsed = parsePermissionRequestBody({ toolName: "Shell", rawPayload: [] });
+    const parsed = parsePermissionRequestBody({ toolName: "NotARealTool", rawPayload: [] });
 
     expect(parsed?.toolName).toBe("Unknown");
     expect(parsed?.rawPayload).toEqual({});
+  });
+
+  it("accepts Codex tool names like Shell and UpdatePlan", () => {
+    const shell = parsePermissionRequestBody({ toolName: "Shell", rawPayload: {} });
+    expect(shell?.toolName).toBe("Shell");
+    const plan = parsePermissionRequestBody({ toolName: "UpdatePlan", rawPayload: {} });
+    expect(plan?.toolName).toBe("UpdatePlan");
   });
 
   it("parses stream tokens and permission routes", () => {
@@ -42,5 +49,16 @@ describe("event server validation", () => {
     expect(streamToken("/events?token=abc")).toBe("");
     expect(isPermissionRoute("/permission/123")).toBe(true);
     expect(isPermissionRoute("/permissions")).toBe(false);
+  });
+
+  it("accepts codex source with new tool names", () => {
+    expect(isCompanionEvent({ ...validEvent, source: "codex", tool: "Shell" })).toBe(true);
+    expect(isCompanionEvent({ ...validEvent, source: "codex", tool: "UpdatePlan" })).toBe(true);
+    expect(isCompanionEvent({ ...validEvent, source: "codex", tool: "ApplyPatch" })).toBe(true);
+    expect(isCompanionEvent({ ...validEvent, source: "codex", tool: "ViewImage" })).toBe(true);
+  });
+
+  it("still rejects unknown tool names", () => {
+    expect(isCompanionEvent({ ...validEvent, tool: "NotARealTool" })).toBe(false);
   });
 });
