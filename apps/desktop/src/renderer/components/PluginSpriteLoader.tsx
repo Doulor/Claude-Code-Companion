@@ -18,14 +18,11 @@ export function PluginSpriteLoader() {
     for (const p of plugins) {
       if (p.enabled && p.trusted && p.resolvedAssets?.spritesCss) {
         const href = `file:///${p.resolvedAssets.spritesCss.replace(/\\/g, "/")}`;
-        console.log(`[PluginSpriteLoader] Injecting CSS for ${p.name}: ${href}`);
         const link = document.createElement("link");
         link.rel = "stylesheet";
         link.href = href;
         link.dataset.pluginSprites = "true";
         link.dataset.pluginId = p.id;
-        link.onload = () => console.log(`[PluginSpriteLoader] CSS loaded: ${p.name}`);
-        link.onerror = () => console.error(`[PluginSpriteLoader] CSS failed: ${p.name} ${href}`);
         head.appendChild(link);
       }
     }
