@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { dirname, join, normalize, resolve, sep } from "node:path";
 import type { CompanionEvent, CustomPlugin, PluginManifest, PluginRunRecord } from "../shared/events.js";
@@ -88,10 +88,12 @@ export function canRunPlugin(plugin: CustomPlugin, event: CompanionEvent): { ok:
   return { ok: true };
 }
 
-export function runPlugin(plugin: CustomPlugin, event: CompanionEvent, onRecord: (record: PluginRunRecord) => void): void {
+export function runPlugin(plugin: CustomPlugin, event: CompanionEvent, onRecord: (record: PluginRunRecord) => void, dataDir?: string): void {
   const startedAt = Date.now();
   const permissionSet = new Set(plugin.permissions ?? []);
   const pluginDir = dirname(plugin.scriptPath);
+  const pluginDataDir = dataDir ? join(dataDir, plugin.id) : join(pluginDir, "data");
+  if (!existsSync(pluginDataDir)) mkdirSync(pluginDataDir, { recursive: true });
   const child = spawn(process.execPath, [plugin.scriptPath], {
     cwd: pluginDir,
     stdio: ["pipe", "pipe", "pipe"],
@@ -101,7 +103,8 @@ export function runPlugin(plugin: CustomPlugin, event: CompanionEvent, onRecord:
       CLAWD_PLUGIN_PERMISSIONS: Array.from(permissionSet).join(","),
       CLAWD_PLUGIN_EVENT: event.event,
       CLAWD_PLUGIN_SETTINGS: JSON.stringify(plugin.settings ?? {}),
-      CLAWD_PLUGIN_DIR: pluginDir
+      CLAWD_PLUGIN_DIR: pluginDir,
+      CLAWD_PLUGIN_DATA_DIR: pluginDataDir
     }
   });
 

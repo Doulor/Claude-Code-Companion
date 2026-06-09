@@ -19,17 +19,20 @@ function processInput(raw) {
   try {
     const event = JSON.parse(raw || "{}");
     const settings = JSON.parse(process.env.CLAWD_PLUGIN_SETTINGS || "{}");
+    const force = process.env.CLAWD_PLUGIN_FORCE === "1";
     const reportHour = parseInt(settings.reportHour || "22", 10);
     const now = new Date();
 
-    // Check if it's time to generate (within 1 hour window)
-    if (now.getHours() !== reportHour) return;
+    // Auto-generate: only at configured hour; Force: always
+    if (!force && now.getHours() !== reportHour) return;
 
-    // Check if report already exists for today
-    const outputDir = resolveOutputDir(settings.outputDir);
+    // Use plugin data directory
+    const outputDir = process.env.CLAWD_PLUGIN_DATA_DIR || resolveOutputDir("");
     const today = formatDate(now);
     const reportPath = path.join(outputDir, `clawd-report-${today}.html`);
-    if (fs.existsSync(reportPath)) return;
+
+    // Skip if already exists (unless forced)
+    if (!force && fs.existsSync(reportPath)) return;
 
     // Read event history
     const historyPath = findEventHistoryPath();
@@ -37,21 +40,20 @@ function processInput(raw) {
     const history = JSON.parse(fs.readFileSync(historyPath, "utf8"));
     const entries = Array.isArray(history) ? history : (history.entries ?? []);
 
-    // Filter yesterday's events
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yStart = startOfDay(yesterday);
-    const yEnd = endOfDay(yesterday);
-    const yesterdayEntries = entries.filter(e => e.timestamp >= yStart && e.timestamp <= yEnd);
+    // Filter yesterday's events (or today if forced)
+    const targetDay = force ? now : new Date(now.getTime() - 86400000);
+    const tStart = startOfDay(targetDay);
+    const tEnd = endOfDay(targetDay);
+    const targetEntries = entries.filter(e => e.timestamp >= tStart && e.timestamp <= tEnd);
 
-    if (yesterdayEntries.length === 0) return;
+    if (targetEntries.length === 0) return;
 
     // Calculate stats
-    const stats = computeStats(yesterdayEntries, yesterday);
+    const stats = computeStats(targetEntries, targetDay);
     const maxTimeline = parseInt(settings.maxTimeline || "20", 10);
 
     // Generate HTML
-    const html = renderReport(stats, yesterday, maxTimeline);
+    const html = renderReport(stats, targetDay, maxTimeline);
 
     // Ensure output directory exists
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });

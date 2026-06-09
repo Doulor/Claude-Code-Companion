@@ -72,6 +72,7 @@ export function PluginsPage({ settings, updateSettings }: { settings: CompanionS
         onInstall={marketItem ? () => void install(marketItem.id) : undefined}
         onRemove={plugin ? () => removePlugin(plugin.id) : undefined}
         onPatchPlugin={patch => plugin ? patchPlugin(plugin.id, patch) : undefined}
+        onRunNow={plugin ? async () => { await window.companion.runPluginNow(plugin.id); void refresh(); } : undefined}
       />
     );
   }

@@ -1483,6 +1483,8 @@ input[type="range"]:focus { box-shadow: none; }
 .plugin-install-btn strong { font-size: 14px; }
 .plugin-install-btn span { color: rgba(36,29,23,.62); font-size: 11px; font-weight: 700; }
 .plugin-remove-btn { align-self: stretch; }
+.plugin-run-now-btn { border-color: rgba(86,166,123,.4); color: var(--green); }
+.plugin-run-now-btn:hover { background: rgba(86,166,123,.12); border-color: rgba(86,166,123,.7); }
 .plugin-detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; align-items: start; }
 .plugin-detail-main, .plugin-detail-sidebar { display: grid; gap: 14px; }
 .plugin-detail-section { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,.42); }

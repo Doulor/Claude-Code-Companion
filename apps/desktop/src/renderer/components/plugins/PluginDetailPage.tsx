@@ -8,7 +8,7 @@ import { PluginRunList } from "./PluginRunList";
 import { PluginSettingsFields } from "./PluginSettingsFields";
 import { SafeMarkdown } from "./SafeMarkdown";
 
-export function PluginDetailPage({ plugin, marketItem, runs, installing, onBack, onInstall, onRemove, onPatchPlugin }: {
+export function PluginDetailPage({ plugin, marketItem, runs, installing, onBack, onInstall, onRemove, onPatchPlugin, onRunNow }: {
   plugin?: CustomPlugin;
   marketItem?: PluginMarketItem;
   runs: PluginRunRecord[];
@@ -17,6 +17,7 @@ export function PluginDetailPage({ plugin, marketItem, runs, installing, onBack,
   onInstall?: () => void;
   onRemove?: () => void;
   onPatchPlugin: (patch: Partial<CustomPlugin>) => void;
+  onRunNow?: () => void;
 }) {
   const { locale } = useI18n();
   const zh = locale === "zh";
@@ -46,7 +47,7 @@ export function PluginDetailPage({ plugin, marketItem, runs, installing, onBack,
             {(plugin?.version ?? marketItem?.version) ? <span>v{plugin?.version ?? marketItem?.version}</span> : null}
           </div>
         </div>
-        <PluginInstallControls marketItem={marketItem} installed={plugin} installing={installing} onInstall={onInstall} onRemove={onRemove} zh={zh} />
+        <PluginInstallControls marketItem={marketItem} installed={plugin} installing={installing} onInstall={onInstall} onRemove={onRemove} onRunNow={onRunNow} zh={zh} />
       </header>
 
       <div className="plugin-detail-layout">

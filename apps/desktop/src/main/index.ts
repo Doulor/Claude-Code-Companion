@@ -34,6 +34,7 @@ const logPath = join(appDataDir, "runtime.log");
 const historyPath = join(appDataDir, "event-history.json");
 const tokenCachePath = join(appDataDir, "token-stats-cache.json");
 const localPluginDir = join(appDataDir, "plugins");
+const pluginDataDir = join(appDataDir, "plugin-data");
 const marketBaseUrl = "https://raw.githubusercontent.com/Doulor/Clawd-Companion/main/plugin-market";
 setTokenCachePath(tokenCachePath);
 let lastKnownCwd: string | null = null;
@@ -668,7 +669,7 @@ function runPluginsForEvent(event: CompanionEvent) {
       pluginRuns = appendPluginRun(pluginRuns, record);
       logRuntime(`Plugin exited: ${record.pluginName} code=${record.exitCode} duration=${record.durationMs}ms${record.timedOut ? " timed-out" : ""}`);
       settingsWindow?.webContents.send("companion:plugin-run", record);
-    });
+    }, pluginDataDir);
   }
 }
 
@@ -1063,6 +1064,18 @@ ipcMain.handle("plugins:get", () => (settings.customPlugins ?? []).map(p => {
   return normalized;
 }));
 ipcMain.handle("plugins:get-runs", () => pluginRuns);
+ipcMain.handle("plugins:run-now", (_, pluginId: string) => {
+  const plugin = (settings.customPlugins ?? []).find(p => p.id === pluginId);
+  if (!plugin) return { ok: false, error: "Plugin not found" };
+  if (!plugin.trusted) return { ok: false, error: "Plugin not trusted" };
+  if (!plugin.scriptPath || !existsSync(plugin.scriptPath)) return { ok: false, error: "Script not found" };
+  const dummyEvent: CompanionEvent = { id: `manual-${Date.now()}`, source: "manual", event: "done", title: "Manual run", message: "Triggered by user", timestamp: Date.now() };
+  runPlugin(normalizePlugin(plugin), dummyEvent, record => {
+    pluginRuns = appendPluginRun(pluginRuns, record);
+    settingsWindow?.webContents.send("companion:plugin-run", record);
+  }, pluginDataDir);
+  return { ok: true };
+});
 ipcMain.handle("plugins:save", (_, plugins: CustomPlugin[]) => {
   saveSettings({ customPlugins: plugins.map(normalizePlugin) });
   return settings.customPlugins;
