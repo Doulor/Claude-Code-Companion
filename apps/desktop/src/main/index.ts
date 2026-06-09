@@ -28,6 +28,7 @@ const devIconPath = join(__dirname, "../../build/icon.ico");
 const prodIconPath = join(process.resourcesPath, "build/icon.ico");
 const iconPath = existsSync(devIconPath) ? devIconPath : prodIconPath;
 const appDataDir = join(app.getPath("userData"), "clawd-companion");
+process.env.CLAWD_APP_VERSION = app.getVersion();
 const settingsPath = join(appDataDir, "settings.json");
 const statsPath = join(appDataDir, "stats.json");
 const logPath = join(appDataDir, "runtime.log");
@@ -1074,7 +1075,7 @@ ipcMain.handle("plugins:run-now", (_, pluginId: string) => {
   runPlugin(normalizePlugin(plugin), dummyEvent, record => {
     pluginRuns = appendPluginRun(pluginRuns, record);
     settingsWindow?.webContents.send("companion:plugin-run", record);
-  }, pluginDataDir);
+  }, pluginDataDir, true);
   return { ok: true };
 });
 ipcMain.handle("plugins:open-data-dir", (_, pluginId: string) => {

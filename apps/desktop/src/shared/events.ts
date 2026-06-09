@@ -309,6 +309,7 @@ export type PluginSettingType = "text" | "number" | "toggle" | "select" | "color
 export interface PluginSettingField {
   key: string;
   label: string;
+  labelZh?: string;
   type: PluginSettingType;
   default?: unknown;
   description?: string;

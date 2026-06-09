@@ -45,7 +45,7 @@ export function PluginListPage({ plugins, market, runs, onOpenInstalled, onOpenM
         <button className="ghost-btn plugin-add-btn" onClick={onAddCustom}>{zh ? "添加本地插件" : "Add custom plugin"}</button>
       </div>
 
-      <section className="plugin-section">
+      <section className="plugin-section installed-section">
         <div className="plugin-section-head"><h3>{zh ? "已安装" : "Installed"}</h3><span>{visibleInstalled.length}</span></div>
         {visibleInstalled.length === 0 ? <div className="empty">{zh ? "没有匹配的已安装插件。" : "No installed plugins match this filter."}</div> : (
           <div className="plugin-card-grid">
@@ -57,8 +57,10 @@ export function PluginListPage({ plugins, market, runs, onOpenInstalled, onOpenM
         )}
       </section>
 
-      <section className="plugin-section">
-        <div className="plugin-section-head"><h3>{zh ? "插件市场" : "Market"}</h3><span>{visibleMarket.length}</span></div>
+      <div className="plugin-section-divider"><span>{zh ? "插件市场" : "Marketplace"}</span></div>
+
+      <section className="plugin-section market-section">
+        <div className="plugin-section-head"><span>{visibleMarket.length} {zh ? "个可用" : "available"}</span></div>
         <div className="plugin-card-grid compact-market">
           {visibleMarket.map(item => <MarketCard key={item.id} item={item} installed={installedMarketIds.has(item.id)} zh={zh} onOpen={() => onOpenMarket(item.id)} />)}
         </div>

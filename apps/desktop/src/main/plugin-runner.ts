@@ -88,7 +88,7 @@ export function canRunPlugin(plugin: CustomPlugin, event: CompanionEvent): { ok:
   return { ok: true };
 }
 
-export function runPlugin(plugin: CustomPlugin, event: CompanionEvent, onRecord: (record: PluginRunRecord) => void, dataDir?: string): void {
+export function runPlugin(plugin: CustomPlugin, event: CompanionEvent, onRecord: (record: PluginRunRecord) => void, dataDir?: string, force?: boolean): void {
   const startedAt = Date.now();
   const permissionSet = new Set(plugin.permissions ?? []);
   const pluginDir = dirname(plugin.scriptPath);
@@ -104,7 +104,8 @@ export function runPlugin(plugin: CustomPlugin, event: CompanionEvent, onRecord:
       CLAWD_PLUGIN_EVENT: event.event,
       CLAWD_PLUGIN_SETTINGS: JSON.stringify(plugin.settings ?? {}),
       CLAWD_PLUGIN_DIR: pluginDir,
-      CLAWD_PLUGIN_DATA_DIR: pluginDataDir
+      CLAWD_PLUGIN_DATA_DIR: pluginDataDir,
+      ...(force ? { CLAWD_PLUGIN_FORCE: "1" } : {})
     }
   });
 

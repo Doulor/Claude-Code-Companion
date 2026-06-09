@@ -5,11 +5,12 @@
   "descriptionZh": "为你的 Claude Code 会话生成精美的 HTML 每日编码报告。",
   "events": ["done"],
   "permissions": ["filesystem"],
-  "timeoutMs": 15000,
+  "timeoutMs": 60000,
   "settings": [
     {
       "key": "reportHour",
       "label": "Report time (hour)",
+      "labelZh": "每日此时自动生成昨日报告（0-23 时）",
       "type": "number",
       "default": 22,
       "min": 0,
@@ -20,14 +21,23 @@
     {
       "key": "maxTimeline",
       "label": "Max timeline items",
+      "labelZh": "报告中最多显示多少条事件记录",
       "type": "number",
       "default": 20,
       "min": 5,
       "max": 50,
       "step": 5,
       "description": "Maximum number of events shown in the timeline"
+    },
+    {
+      "key": "generateCumulative",
+      "label": "Generate cumulative report",
+      "labelZh": "生成累计报告",
+      "type": "toggle",
+      "default": true,
+      "description": "Also maintain a cumulative all-time report (clawd-report-cumulative.html) with per-date breakdown and date switching."
     }
   ],
-  "readme": "# Daily Report\n\nGenerate a beautiful HTML daily report of your Claude Code sessions.\n\n## How to use\n\n1. Install, trust, and enable the plugin.\n2. Set the **Report time** hour (0-23). The plugin auto-generates at that hour.\n3. You can also click **Run now** in the detail page to generate immediately.\n4. Reports are saved to `~/.clawd-companion/plugin-data/daily-report/`.\n\n## What's in the report\n\n- Session overview: total sessions, duration, tool calls, errors\n- Tool usage distribution (bar chart)\n- Event timeline (color-coded)\n- Success/error ratio (donut chart)\n\n## Report naming\n\nFiles are named `clawd-report-YYYY-MM-DD.html` — one per day, no duplicates.",
-  "readmeZh": "# 每日编码报告\n\n为你的 Claude Code 会话生成精美的 HTML 每日编码报告。\n\n## 如何使用\n\n1. 安装、信任并启用插件。\n2. 设置 **报告时间** 小时（0-23）。插件会在该时间自动生成。\n3. 也可以在详情页点击 **立即运行** 手动生成。\n4. 报告保存在 `~/.clawd-companion/plugin-data/daily-report/`。\n\n## 报告内容\n\n- 会话概览：总会话数、总时长、工具调用次数、错误次数\n- 工具使用分布（条形图）\n- 事件时间线（彩色标记）\n- 成功/错误比例（环形图）\n\n## 文件命名\n\n文件名为 `clawd-report-YYYY-MM-DD.html` — 每天一份，不会重复堆积。"
+  "readme": "# Daily Report\n\nGenerate a beautiful HTML daily report of your Claude Code sessions.\n\n## How to use\n\n1. Install, trust, and enable the plugin.\n2. Set the **Report time** hour (0-23). The plugin auto-generates at that hour.\n3. You can also click **Generate now** in the detail page to generate immediately.\n4. Enable **Generate cumulative report** to maintain an all-time stats page with date switching.\n5. Reports are saved to `~/.clawd-companion/plugin-data/daily-report/`.\n\n## What's in the report\n\n- Session overview: total sessions, duration, tool calls, errors, success rate\n- Tool usage distribution (bar chart)\n- Event timeline (color-coded)\n- Success/error ratio (donut chart)\n- Peak activity hour, average session duration, top tools\n\n## Cumulative report\n\nWhen enabled, `clawd-report-cumulative.html` contains:\n- All-time aggregate stats across every recorded day\n- Per-date breakdown with expandable daily cards\n- Interactive date switching to view any day in detail\n- Search/filter by date range\n\n## Report naming\n\nFiles are named `clawd-report-YYYY-MM-DD.html` — one per day, no duplicates.",
+  "readmeZh": "# 每日编码报告\n\n为你的 Claude Code 会话生成精美的 HTML 每日编码报告。\n\n## 如何使用\n\n1. 安装、信任并启用插件。\n2. 设置 **报告时间** 小时（0-23）。插件会在该时间自动生成。\n3. 也可以在详情页点击 **立即生成** 手动生成。\n4. 开启 **生成累计报告** 可维护一份包含全部历史的统计页面，支持日期切换。\n5. 报告保存在 `~/.clawd-companion/plugin-data/daily-report/`。\n\n## 报告内容\n\n- 会话概览：总会话数、总时长、工具调用次数、错误次数、成功率\n- 工具使用分布（条形图）\n- 事件时间线（彩色标记）\n- 成功/错误比例（环形图）\n- 活跃高峰时段、平均会话时长、最常用工具\n\n## 累计报告\n\n开启后，`clawd-report-cumulative.html` 包含：\n- 所有记录天数的聚合统计数据\n- 按日期分组的可展开每日卡片\n- 交互式日期切换查看任意一天详情\n- 按日期范围搜索/筛选\n\n## 文件命名\n\n文件名为 `clawd-report-YYYY-MM-DD.html` — 每天一份，不会重复堆积。"
 }

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import type { CustomPlugin, PluginMarketItem, PluginRunRecord } from "../../../shared/events";
 import { useI18n } from "../../useI18n";
 import { Toggle } from "../ui/Toggle";
@@ -17,11 +17,36 @@ export function PluginDetailPage({ plugin, marketItem, runs, installing, onBack,
   onInstall?: () => void;
   onRemove?: () => void;
   onPatchPlugin: (patch: Partial<CustomPlugin>) => void;
-  onRunNow?: () => void;
+  onRunNow?: () => Promise<{ ok: boolean; error?: string }>;
 }) {
   const { locale } = useI18n();
   const zh = locale === "zh";
   const [readmeExpanded, setReadmeExpanded] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [toast, setToast] = useState<{ text: string; type: "success" | "error" } | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const handleGenerate = useCallback(async () => {
+    if (!onRunNow || generating) return;
+    setGenerating(true);
+    try {
+      const result = await onRunNow();
+      if (result.ok) {
+        setToast({ text: zh ? "报告生成请求已发送，请查看下方「最近运行」确认结果" : "Report request sent. Check Recent runs below for results.", type: "success" });
+      } else {
+        setToast({ text: result.error ?? (zh ? "生成失败" : "Generation failed"), type: "error" });
+      }
+    } catch (e) {
+      setToast({ text: zh ? "生成出错，请重试" : "Error, please retry", type: "error" });
+    } finally {
+      setGenerating(false);
+    }
+  }, [onRunNow, generating, zh]);
   const title = zh ? plugin?.manifest?.nameZh ?? plugin?.name ?? marketItem?.nameZh ?? marketItem?.name ?? "插件" : plugin?.manifest?.name ?? plugin?.name ?? marketItem?.name ?? "Plugin";
   const description = zh ? plugin?.manifest?.descriptionZh ?? plugin?.manifest?.description ?? marketItem?.descriptionZh ?? marketItem?.description ?? "" : plugin?.manifest?.description ?? marketItem?.description ?? "";
   const manifest = plugin?.manifest;
@@ -47,7 +72,7 @@ export function PluginDetailPage({ plugin, marketItem, runs, installing, onBack,
             {(plugin?.version ?? marketItem?.version) ? <span>v{plugin?.version ?? marketItem?.version}</span> : null}
           </div>
         </div>
-        <PluginInstallControls marketItem={marketItem} installed={plugin} installing={installing} onInstall={onInstall} onRemove={onRemove} onRunNow={onRunNow} zh={zh} />
+        <PluginInstallControls marketItem={marketItem} installed={plugin} installing={installing} onInstall={onInstall} onRemove={onRemove} zh={zh} />
       </header>
 
       <div className="plugin-detail-layout">
@@ -68,6 +93,16 @@ export function PluginDetailPage({ plugin, marketItem, runs, installing, onBack,
               <PluginSettingsFields fields={plugin.manifest?.settings ?? []} values={plugin.settings ?? {}} onChange={(key, value) => onPatchPlugin({ settings: { ...(plugin.settings ?? {}), [key]: value } })} zh={zh} />
             </section>
           ) : null}
+
+          {plugin && scriptLike && onRunNow ? (
+            <section className="plugin-detail-section">
+              <button className="plugin-generate-btn" disabled={generating} onClick={handleGenerate}>
+                {generating ? (zh ? "生成中..." : "Generating...") : (zh ? "立即生成" : "Generate now")}
+              </button>
+            </section>
+          ) : null}
+
+          {toast ? <div className={`plugin-toast ${toast.type}`}>{toast.text}</div> : null}
 
           {plugin ? (
             <section className="plugin-detail-section">

@@ -48,6 +48,7 @@ export function PluginSettingsFields({ fields, values, onChange, zh = false }: {
 
 function localFieldLabel(field: PluginSettingField, zh: boolean): string {
   if (!zh) return field.label;
+  if (field.labelZh) return field.labelZh;
   const labels: Record<string, string> = {
     workMinutes: "专注时长",
     breakMinutes: "休息时长",
