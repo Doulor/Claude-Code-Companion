@@ -32,6 +32,8 @@ export interface Provider {
   normalize(payload: Record<string, unknown>, env: NormalizeEnv): CompanionEvent;
   /** Pure: true if the payload represents a permission gate. */
   isPermissionEvent(payload: Record<string, unknown>): boolean;
+  /** Pure: extract a human-readable tool name and detail for a permission event. */
+  permissionDetail(payload: Record<string, unknown>, env: NormalizeEnv): { tool: string; detail: string | undefined };
   /** Pure: format a permission decision for stdout (Codex vs Claude differ). */
   formatPermissionDecision(decision: "allow" | "deny", reason: string | undefined): string;
 }
@@ -160,9 +162,15 @@ export const claudeCodeProvider: Provider = {
     if (claudeHookName(payload) !== "PreToolUse") return false;
     // permission_mode 字段缺失时（子 agent 派发场景），不介入权限流程
     const permMode = text(payload.permission_mode) ?? text(payload.permissionMode);
-    if (permMode === undefined) return false;
+    if (!permMode) return false;
     if (permMode === "bypassPermissions" || permMode === "dontAsk" || permMode === "auto") return false;
     return true;
+  },
+  permissionDetail(payload, _env) {
+    const tool = claudeToolName(payload);
+    // 权限请求必须显示完整详情，不受 privacyMode 限制
+    const detail = claudeDetailForTool(payload, tool, "detailed");
+    return { tool: String(tool), detail };
   },
   formatPermissionDecision(decision, reason) {
     return JSON.stringify({
@@ -284,6 +292,12 @@ export const codexProvider: Provider = {
   },
   isPermissionEvent(payload) {
     return codexHookName(payload) === "PermissionRequest";
+  },
+  permissionDetail(payload, _env) {
+    const tool = codexToolName(payload);
+    // 权限请求必须显示完整详情，不受 privacyMode 限制
+    const detail = codexDetailForTool(payload, tool, "detailed");
+    return { tool: String(tool), detail };
   },
   formatPermissionDecision(decision, reason) {
     return JSON.stringify({

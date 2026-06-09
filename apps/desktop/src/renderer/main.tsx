@@ -36,6 +36,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { SessionStatsDashboard } from "./components/SessionStatsDashboard";
 import { TimelinePanel } from "./components/TimelinePanel";
+import { PermissionCard } from "./components/PermissionCard";
 import { PluginSpriteLoader } from "./components/PluginSpriteLoader";
 import { PluginsPage } from "./components/plugins/PluginsPage";
 import { PluginPomodoroWidget } from "./components/plugins/widgets/PluginPomodoroWidget";
@@ -263,44 +264,33 @@ function PetApp() {
   }, [effectiveIdleBubble]);
 
   useEffect(() => {
-    if (editMode) {
-      void window.companion.setPetInteractive(false);
-      const handle = (e: MouseEvent) => {
-        if (dragging.current) return;
-        const target = e.target as HTMLElement;
-        void window.companion.setPetInteractive(!!target.closest('.edit-zone, .zone-resize, .edge-handle, .edit-zone-companion'));
-      };
-      window.addEventListener('mousemove', handle);
-      return () => {
-        window.removeEventListener('mousemove', handle);
-        void window.companion.setPetInteractive(false);
-      };
-    }
-    if (settings.clickThrough) {
-      void window.companion.setPetInteractive(false);
-      const handle = (e: MouseEvent) => {
-        if (dragging.current) return;
-        const target = e.target as HTMLElement;
-        void window.companion.setPetInteractive(!!target.closest('.perm-card, .plugin-widget, .pomodoro-widget'));
-      };
-      window.addEventListener('mousemove', handle);
-      return () => {
-        window.removeEventListener('mousemove', handle);
-        void window.companion.setPetInteractive(false);
-      };
-    }
-    void window.companion.setPetInteractive(false);
+    const selector = editMode
+      ? ".edit-zone, .zone-resize, .edge-handle, .edit-zone-companion"
+      : settings.clickThrough
+        ? ".perm-card, .plugin-widget, .pomodoro-widget"
+        : ".clawd, .bubble-wrapper, .tool-streams, .permission-card-wrapper, .perm-card, .plugin-widget, .pomodoro-widget";
+    let isInteractive = false;
+    const setInteractive = (next: boolean) => {
+      if (isInteractive === next) return;
+      isInteractive = next;
+      void window.companion.setPetInteractive(next);
+    };
     const handle = (e: MouseEvent) => {
       if (dragging.current) return;
       const target = e.target as HTMLElement;
-      void window.companion.setPetInteractive(!!target.closest('.clawd, .bubble-wrapper, .tool-streams, .permission-card-wrapper, .perm-card, .plugin-widget, .pomodoro-widget'));
+      setInteractive(!!target.closest(selector));
     };
+    const leave = () => setInteractive(false);
+
+    void window.companion.setPetInteractive(false);
     window.addEventListener('mousemove', handle);
+    window.addEventListener('mouseleave', leave);
     return () => {
       window.removeEventListener('mousemove', handle);
-      void window.companion.setPetInteractive(false);
+      window.removeEventListener('mouseleave', leave);
+      if (isInteractive) void window.companion.setPetInteractive(false);
     };
-  }, [editMode, settings.clickThrough, activePermissions]);
+  }, [editMode, settings.clickThrough]);
 
   const offsetsRef = useRef(settings.positionOffsets ?? {});
   const scaleRef = useRef({ clawd: settings.clawdScale, bubble: settings.thoughtScale, ribbon: settings.bubbleScale, permission: settings.permissionScale });
@@ -355,6 +345,51 @@ function PetApp() {
   useEffect(() => { offsetsRef.current = settings.positionOffsets ?? {}; }, [settings.positionOffsets]);
   useEffect(() => { scaleRef.current = { clawd: settings.clawdScale, bubble: settings.thoughtScale, ribbon: settings.bubbleScale, permission: settings.permissionScale }; }, [settings.clawdScale, settings.thoughtScale, settings.bubbleScale, settings.permissionScale]);
 
+  const offsets = settings.positionOffsets ?? {};
+  const viewOff = offsets.view ?? { x: 0, y: 0 };
+  const pluginWidgets = getPluginWidgets(settings);
+
+  const permCardRef = useRef<HTMLDivElement>(null);
+  const lastPermissionRect = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+  useEffect(() => {
+    const clearRect = () => {
+      if (!lastPermissionRect.current) return;
+      lastPermissionRect.current = null;
+      void window.companion.updatePermissionCardRect(null);
+    };
+    if (activePermissions.length === 0) {
+      clearRect();
+      return;
+    }
+
+    let frame = 0;
+    const report = () => {
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const el = permCardRef.current;
+        if (!el) return;
+        const { x, y, width, height } = el.getBoundingClientRect();
+        const next = { x, y, width, height };
+        const prev = lastPermissionRect.current;
+        if (prev && Math.abs(prev.x - x) < 1 && Math.abs(prev.y - y) < 1 && Math.abs(prev.width - width) < 1 && Math.abs(prev.height - height) < 1) return;
+        lastPermissionRect.current = next;
+        void window.companion.updatePermissionCardRect(next);
+      });
+    };
+
+    report();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(report);
+    if (permCardRef.current) observer?.observe(permCardRef.current);
+    window.addEventListener("resize", report);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener("resize", report);
+      clearRect();
+    };
+  }, [activePermissions[0]?.id, activePermissions[0]?.toolDetail, activePermissions.length, offsets.permission?.x, offsets.permission?.y, settings.permissionScale]);
+
   const editPreviewEvent = useMemo(
     () => makeEvent("tool_start", "manual", "编辑模式预览", "这是桌宠实际显示的卡片 / 气泡位置。", "Edit"),
     []
@@ -369,10 +404,6 @@ function PetApp() {
   );
 
   if (!settings.petEnabled) return <main className="pet-stage pet-disabled" />;
-
-  const offsets = settings.positionOffsets ?? {};
-  const viewOff = offsets.view ?? { x: 0, y: 0 };
-  const pluginWidgets = getPluginWidgets(settings);
 
   function begin(k: string, e: React.MouseEvent) {
     if (!editMode) return;
@@ -461,15 +492,14 @@ function PetApp() {
               <ToolStreams streams={previewStreams} offset={offsets.ribbon} />
             ) : null}
             {settings.showBubbles ? (
-              <div className="permission-card-wrapper" style={{ transform: `translate(${offsets.permission?.x ?? 0}px, ${offsets.permission?.y ?? 0}px)` }}>
-                <PermissionCard
-                  permission={editPreviewPermission}
-                  queueCount={1}
-                  onAllow={() => {}}
-                  onDeny={() => {}}
-                  settings={settings}
-                />
-              </div>
+              <PermissionCard
+                permission={editPreviewPermission}
+                queueCount={1}
+                onAllow={() => {}}
+                onDeny={() => {}}
+                settings={settings}
+                offset={offsets.permission}
+              />
             ) : null}
             {pluginWidgets.map(({ plugin, widget, widgetKey }) => widget.type === "pomodoro" ? (
               <PluginPomodoroWidget key={`${plugin.id}:${widgetKey}:preview`} plugin={plugin} offset={getPluginWidgetOffset(settings, plugin, widgetKey)} preview />
@@ -574,15 +604,15 @@ function PetApp() {
         </div>
       )}
         {activePermissions.length > 0 ? (
-          <div className="permission-card-wrapper" style={{ transform: `translate(${offsets.permission?.x ?? 0}px, ${offsets.permission?.y ?? 0}px)` }}>
-            <PermissionCard
-              permission={activePermissions[0]}
-              queueCount={activePermissions.length}
-              onAllow={() => respondToPermission(activePermissions[0].id, "allow")}
-              onDeny={() => respondToPermission(activePermissions[0].id, "deny")}
-              settings={settings}
-            />
-          </div>
+          <PermissionCard
+            hitTestRef={permCardRef}
+            permission={activePermissions[0]}
+            queueCount={activePermissions.length}
+            onAllow={() => respondToPermission(activePermissions[0].id, "allow")}
+            onDeny={() => respondToPermission(activePermissions[0].id, "deny")}
+            settings={settings}
+            offset={offsets.permission}
+          />
         ) : settings.showBubbles && currentEvent && getFeedbackMode(currentEvent) !== "ribbon" ? (
           <div className="bubble-wrapper" style={{ transform: `translate(${offsets.bubble?.x ?? 0}px, ${offsets.bubble?.y ?? 0}px)` }}>
             <Bubble event={currentEvent} state={stateFromEvent(currentEvent)} settings={settings} />
@@ -655,49 +685,6 @@ function Bubble({ event, state, settings }: { event: CompanionEvent; state: PetS
   );
 }
 
-function PermissionCard({ permission, queueCount, onAllow, onDeny, settings }: {
-  permission: PermissionRequest;
-  queueCount: number;
-  onAllow: () => void;
-  onDeny: () => void;
-  settings: CompanionSettings;
-}) {
-  const { t } = useI18n();
-  const color = toolColorMap[permission.toolName] ?? "steel";
-  const detail = permission.toolDetail ?? permission.toolName;
-
-  return (
-    <div className="permission-card-inner" style={{ transform: `scale(${settings.permissionScale})`, opacity: settings.permissionOpacity }}>
-      <section className={`perm-card`}>
-        <div className="perm-card-scanline" />
-        <div className="perm-card-topbar">
-          <span className="perm-card-dot" />
-          <span className="perm-card-label">ACCESS REQUEST</span>
-          <span className="perm-card-dot" />
-        </div>
-        <div className="perm-card-main">
-          <div className="perm-card-tool-line">
-            <span className="perm-card-prompt">&gt;</span>
-            <span className={`perm-card-toolname color-${color}`}>{permission.toolName}</span>
-          </div>
-          <code className="perm-card-detail">{detail}</code>
-        </div>
-        <div className="perm-card-actions">
-          <button className="perm-btn perm-btn-allow" onClick={onAllow}>
-            <span className="perm-btn-key">Y</span> {t("pet.permissionAllow", "允许")}
-          </button>
-          <button className="perm-btn perm-btn-deny" onClick={onDeny}>
-            <span className="perm-btn-key">N</span> {t("pet.permissionDeny", "拒绝")}
-          </button>
-        </div>
-        {queueCount > 1 && (
-          <div className="perm-card-queue">+{queueCount - 1} pending</div>
-        )}
-      </section>
-    </div>
-  );
-}
-
 const toolColorMap: Record<string, string> = {
   Read: "mint",
   Edit: "coral",
@@ -713,25 +700,11 @@ const toolColorMap: Record<string, string> = {
   Task: "steel",
   AskUserQuestion: "honey",
   MCP: "purple",
+  Shell: "ink",
+  ApplyPatch: "coral",
+  UpdatePlan: "steel",
+  ViewImage: "blue",
   Unknown: "steel"
-};
-
-const toolIconMap: Record<string, string> = {
-  Read: "R",
-  Edit: "E",
-  Write: "W",
-  Bash: "B",
-  Grep: "G",
-  Glob: "G",
-  WebFetch: "W",
-  WebSearch: "S",
-  Notebook: "N",
-  Agent: "A",
-  Skill: "K",
-  Task: "T",
-  AskUserQuestion: "?",
-  MCP: "M",
-  Unknown: "?"
 };
 
 function ToolStreams({ streams, offset }: { streams: ToolStream[]; offset?: { x: number; y: number } }) {

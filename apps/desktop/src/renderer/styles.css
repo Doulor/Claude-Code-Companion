@@ -446,150 +446,226 @@ button {
 }
 .perm-card {
   position: relative;
-  min-width: 210px;
-  max-width: 270px;
-  border: 2px solid #1a1a1a;
-  border-radius: 6px;
-  background: rgba(20, 17, 14, 0.94);
+  min-width: 230px;
+  max-width: 290px;
+  border-radius: 12px;
+  background: rgba(28, 24, 20, 0.94);
+  border: 1px solid rgba(234, 187, 88, 0.22);
   box-shadow:
-    0 20px 52px rgba(23, 18, 15, 0.42),
-    0 0 0 1px rgba(234, 187, 88, 0.38),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(14px);
-  animation: perm-card-in 280ms steps(3, end) both;
+    0 16px 48px rgba(23, 18, 15, 0.4),
+    0 0 0 1px rgba(234, 187, 88, 0.1),
+    0 0 24px var(--risk-glow, rgba(234, 187, 88, 0.08));
+  backdrop-filter: blur(16px);
+  animation: perm-card-in 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
   pointer-events: auto;
   overflow: hidden;
+  transform-origin: top left;
 }
-.perm-card-scanline {
+
+/* Risk indicator bar at top */
+.perm-card-risk-bar {
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--risk-color, var(--honey)), transparent);
+  position: relative;
+}
+.perm-card-risk-bar[data-risk="high"] {
+  background: linear-gradient(90deg, transparent, var(--coral), transparent);
+}
+.perm-card-risk-bar[data-risk="medium"] {
+  background: linear-gradient(90deg, transparent, var(--honey), transparent);
+}
+.perm-card-risk-bar[data-risk="low"] {
+  background: linear-gradient(90deg, transparent, var(--mint), transparent);
+}
+.perm-card-risk-pulse {
   position: absolute;
   inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0, 0, 0, 0.03) 3px
-  );
-  pointer-events: none;
-  z-index: 5;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+  animation: perm-risk-sweep 2s ease-in-out infinite;
 }
-.perm-card-topbar {
+@keyframes perm-risk-sweep {
+  0%, 100% { transform: translateX(-100%); opacity: 0; }
+  50% { transform: translateX(100%); opacity: 1; }
+}
+
+/* Header */
+.perm-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 7px 10px;
-  background: rgba(234, 187, 88, 0.16);
-  border-bottom: 1px solid rgba(234, 187, 88, 0.28);
+  padding: 8px 12px 6px;
 }
-.perm-card-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--honey);
-  box-shadow: 0 0 6px rgba(234, 187, 88, 0.7);
-}
-.perm-card-label {
-  font-family: "Cascadia Mono", "Consolas", monospace;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 2px;
-  color: var(--honey);
-  text-transform: uppercase;
-}
-.perm-card-main {
-  padding: 10px 12px;
-}
-.perm-card-tool-line {
+.perm-card-header-left {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: 6px;
 }
-.perm-card-prompt {
-  font-family: "Cascadia Mono", "Consolas", monospace;
-  font-size: 14px;
-  font-weight: 900;
-  color: var(--honey);
+.perm-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.01em;
 }
-.perm-card-toolname {
-  font-family: "Cascadia Mono", "Consolas", monospace;
-  font-size: 14px;
-  font-weight: 900;
-  text-shadow: 0 0 8px color-mix(in srgb, currentColor 60%, transparent);
-}
-.perm-card-detail {
-  display: block;
-  padding: 6px 8px;
-  border-radius: 3px;
-  background: rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  font-family: "Cascadia Mono", "Consolas", monospace;
+.perm-card-risk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 999px;
   font-size: 10px;
-  color: #b8c9b0;
-  word-break: break-all;
-  line-height: 1.35;
-  text-shadow: 0 0 4px rgba(184, 201, 176, 0.3);
+  font-weight: 800;
+  letter-spacing: 0.5px;
 }
+.perm-card-risk-badge[data-risk="low"] {
+  color: var(--mint);
+  background: rgba(86,166,123,0.14);
+}
+.perm-card-risk-badge[data-risk="medium"] {
+  color: var(--honey);
+  background: rgba(234,187,88,0.16);
+}
+.perm-card-risk-badge[data-risk="high"] {
+  color: var(--coral);
+  background: rgba(210,95,80,0.16);
+  animation: perm-badge-pulse 1.5s ease-in-out infinite;
+}
+@keyframes perm-badge-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Body */
+.perm-card-body {
+  padding: 4px 12px 10px;
+}
+.perm-card-tool-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.perm-card-tool-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 13px;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+.perm-card-tool-icon[data-color="mint"]  { background: rgba(86,166,123,0.18); color: var(--mint); }
+.perm-card-tool-icon[data-color="coral"] { background: rgba(210,95,80,0.16); color: var(--coral); }
+.perm-card-tool-icon[data-color="ink"]   { background: rgba(36,29,23,0.2); color: var(--ink); border: 1px solid rgba(36,29,23,0.3); }
+.perm-card-tool-icon[data-color="blue"]  { background: rgba(109,147,167,0.16); color: var(--blue); }
+.perm-card-tool-icon[data-color="steel"] { background: rgba(69,105,123,0.16); color: var(--steel); }
+.perm-card-tool-icon[data-color="honey"] { background: rgba(234,187,88,0.16); color: var(--honey); }
+.perm-card-tool-icon[data-color="purple"]{ background: rgba(139,109,200,0.16); color: var(--purple); }
+.perm-card-tool-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.perm-card-tool-name {
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff5d9;
+  letter-spacing: -0.02em;
+}
+.perm-card-tool-detail {
+  display: block;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 11px;
+  color: #b0c0a8;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 220px;
+  mask-image: linear-gradient(to right, transparent 0%, black 6px, black calc(100% - 6px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 6px, black calc(100% - 6px), transparent 100%);
+}
+
+@keyframes perm-detail-marquee {
+  0%, 8% { transform: translateX(0); }
+  85%, 100% { transform: translateX(calc(-100% + 200px)); }
+}
+
+.perm-card-tool-detail.marquee {
+  animation: perm-detail-marquee 6s ease-in-out infinite;
+}
+
+/* Queue indicator */
+.perm-card-queue {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 12px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--honey);
+  opacity: 0.8;
+}
+
+/* Actions */
 .perm-card-actions {
   display: flex;
   gap: 6px;
-  padding: 8px 12px 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 6px 12px 10px;
 }
-.perm-btn {
+.perm-card-btn {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  min-height: 30px;
-  padding: 0 8px;
+  min-height: 32px;
+  padding: 0 10px;
   border: 1px solid;
-  border-radius: 4px;
-  font-family: "Cascadia Mono", "Consolas", monospace;
-  font-size: 11px;
-  font-weight: 800;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
-  transition: background 120ms ease, transform 80ms ease;
+  transition: background 140ms ease, border-color 140ms ease, transform 100ms ease, box-shadow 140ms ease;
 }
-.perm-btn:hover {
+.perm-card-btn:hover {
   transform: translateY(-1px);
 }
-.perm-btn:active {
-  transform: translateY(0);
+.perm-card-btn:active {
+  transform: translateY(0) scale(0.98);
 }
-.perm-btn-key {
-  width: 18px;
-  height: 18px;
-  display: grid;
-  place-items: center;
-  border-radius: 3px;
-  font-size: 9px;
-  background: rgba(255, 255, 255, 0.12);
-}
-.perm-btn-allow {
-  background: rgba(114, 169, 140, 0.28);
-  border-color: rgba(114, 169, 140, 0.5);
-  color: #c0e8c8;
-}
-.perm-btn-allow:hover {
-  background: rgba(114, 169, 140, 0.44);
-}
-.perm-btn-deny {
-  background: rgba(217, 107, 90, 0.18);
-  border-color: rgba(217, 107, 90, 0.38);
+.perm-card-btn-deny {
+  background: rgba(210, 95, 80, 0.14);
+  border-color: rgba(210, 95, 80, 0.32);
   color: #e8a098;
 }
-.perm-btn-deny:hover {
-  background: rgba(217, 107, 90, 0.32);
+.perm-card-btn-deny:hover {
+  background: rgba(210, 95, 80, 0.24);
+  border-color: rgba(210, 95, 80, 0.48);
+  box-shadow: 0 4px 12px rgba(210, 95, 80, 0.12);
 }
-.perm-card-queue {
-  padding: 5px 12px 6px;
-  text-align: center;
-  font-family: "Cascadia Mono", "Consolas", monospace;
-  font-size: 9px;
-  color: rgba(234, 187, 88, 0.7);
-  background: rgba(0, 0, 0, 0.2);
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+.perm-card-btn-allow {
+  background: rgba(86, 166, 123, 0.2);
+  border-color: rgba(86, 166, 123, 0.4);
+  color: #b8e8c4;
+}
+.perm-card-btn-allow:hover {
+  background: rgba(86, 166, 123, 0.32);
+  border-color: rgba(86, 166, 123, 0.56);
+  box-shadow: 0 4px 12px rgba(86, 166, 123, 0.12);
+}
+.perm-card-btn-arrow {
+  opacity: 0.5;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+.perm-card-btn-allow:hover .perm-card-btn-arrow {
+  opacity: 1;
+  transform: translateX(1px);
 }
 .edit-zone-permission {
   left: 10px;
@@ -1433,14 +1509,6 @@ input[type="range"]:focus { box-shadow: none; }
 .plugin-chip-row { display: flex; gap: 5px; flex-wrap: wrap; }
 .plugin-chip-row em { font-style: normal; border-radius: 999px; padding: 3px 7px; color: var(--ink); background: rgba(234,187,88,.18); font-size: 11px; }
 .plugin-chip-row.permissions em { color: var(--green); background: rgba(86,166,123,.14); }
-.permission-card-v2 { display: grid; gap: 10px; border-width: 2px; }
-.permission-tool-row { display: flex; justify-content: space-between; gap: 12px; }
-.permission-meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
-.permission-risk { display: inline-flex; align-items: center; gap: 3px; border-radius: 999px; padding: 3px 7px; font-size: 11px; font-weight: 800; }
-.permission-risk.low { color: var(--green); background: rgba(86,166,123,.14); }
-.permission-risk.medium { color: var(--honey); background: rgba(234,187,88,.16); }
-.permission-risk.high { color: var(--coral); background: rgba(210,95,80,.14); }
-.permission-risk-note { color: var(--muted); font-size: 12px; line-height: 1.35; }
 
 .plugins-page { display: grid; gap: 18px; }
 .plugins-workbench-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; padding: 20px; border: 1px solid var(--line); border-radius: 22px; background: radial-gradient(circle at top left, rgba(234,187,88,.24), transparent 42%), rgba(255,255,255,.42); box-shadow: 0 18px 50px rgba(36,29,23,.08); }
@@ -3454,6 +3522,59 @@ input[type="range"]:active::-webkit-slider-thumb,
   background: linear-gradient(135deg, #d96b5a, #b85d43);
 }
 
+/* --- Liquid Glass Permission Card --- */
+[data-ui-style=liquid] .perm-card {
+  background: rgba(255, 255, 255, 0.42);
+  border-color: rgba(255, 255, 255, 0.48);
+  box-shadow:
+    0 16px 48px rgba(58, 86, 130, 0.12),
+    0 0 0 1px rgba(255, 255, 255, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    0 0 24px var(--risk-glow, rgba(126, 225, 255, 0.08));
+}
+[data-ui-style=liquid] .perm-card-title { color: #1c2a3a; }
+[data-ui-style=liquid] .perm-card-tool-name { color: #1a2a3a; }
+[data-ui-style=liquid] .perm-card-tool-detail {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #3a4a5a;
+}
+[data-ui-style=liquid] .perm-card-btn-deny {
+  background: rgba(255, 255, 255, 0.4);
+  border-color: rgba(210, 95, 80, 0.32);
+  color: #7b3028;
+}
+[data-ui-style=liquid] .perm-card-btn-deny:hover {
+  background: rgba(255, 255, 255, 0.54);
+  border-color: rgba(210, 95, 80, 0.48);
+}
+[data-ui-style=liquid] .perm-card-btn-allow {
+  background: linear-gradient(135deg, rgba(126,225,255,0.68), rgba(255,214,120,0.58));
+  border-color: rgba(255,255,255,0.46);
+  color: #0c1d2c;
+  box-shadow: 0 8px 20px rgba(58,86,130,0.14), inset 0 1px 0 rgba(255,255,255,0.62);
+}
+[data-ui-style=liquid] .perm-card-btn-allow:hover {
+  background: linear-gradient(135deg, rgba(126,225,255,0.82), rgba(255,214,120,0.72));
+}
+[data-ui-style=liquid] .perm-card-risk-badge[data-risk="low"] {
+  color: #2a7a4a;
+  background: rgba(86,166,123,0.18);
+}
+[data-ui-style=liquid] .perm-card-risk-badge[data-risk="medium"] {
+  color: #8a6a1a;
+  background: rgba(234,187,88,0.2);
+}
+[data-ui-style=liquid] .perm-card-risk-badge[data-risk="high"] {
+  color: #8a3a2a;
+  background: rgba(210,95,80,0.18);
+}
+[data-ui-style=liquid] .perm-card-tool-icon[data-color="ink"] {
+  background: rgba(28, 42, 58, 0.12);
+  color: #1c2a3a;
+  border-color: rgba(28, 42, 58, 0.2);
+}
+
 [data-ui-style=liquid] .note,
 [data-ui-style=liquid] .launch-note,
 [data-ui-style=liquid] .event-row span,
@@ -3593,6 +3714,53 @@ input[type="range"]:active::-webkit-slider-thumb,
   color: #0c1d2c;
   background: linear-gradient(135deg, rgba(126,225,255,0.7), rgba(255,214,120,0.6));
 }
+/* --- Liquid Glass Dark Permission Card --- */
+[data-ui-style=liquid][data-theme=dark] .perm-card {
+  background: linear-gradient(135deg, rgba(218,239,255,0.1), rgba(218,239,255,0.04));
+  border-color: rgba(218,239,255,0.16);
+  box-shadow:
+    0 16px 48px rgba(0,0,0,0.28),
+    0 0 0 1px rgba(218,239,255,0.12),
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    0 0 24px var(--risk-glow, rgba(126,225,255,0.06));
+}
+[data-ui-style=liquid][data-theme=dark] .perm-card-title { color: #f4eadf; }
+[data-ui-style=liquid][data-theme=dark] .perm-card-tool-name { color: #fff5d9; }
+[data-ui-style=liquid][data-theme=dark] .perm-card-tool-detail {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.08);
+  color: #a0b098;
+}
+[data-ui-style=liquid][data-theme=dark] .perm-card-btn-deny {
+  background: linear-gradient(135deg, rgba(218,239,255,0.16), rgba(218,239,255,0.08));
+  border-color: rgba(210,95,80,0.26);
+  color: #d89088;
+}
+[data-ui-style=liquid][data-theme=dark] .perm-card-btn-deny:hover {
+  background: linear-gradient(135deg, rgba(218,239,255,0.22), rgba(218,239,255,0.12));
+  border-color: rgba(210,95,80,0.4);
+}
+[data-ui-style=liquid][data-theme=dark] .perm-card-btn-allow {
+  background: linear-gradient(135deg, rgba(126,225,255,0.7), rgba(255,214,120,0.6));
+  border-color: rgba(255,255,255,0.28);
+  color: #0c1d2c;
+}
+[data-ui-style=liquid][data-theme=dark] .perm-card-btn-allow:hover {
+  background: linear-gradient(135deg, rgba(126,225,255,0.82), rgba(255,214,120,0.72));
+}
+[data-ui-style=liquid][data-theme=dark] .perm-card-risk-badge[data-risk="low"] {
+  color: var(--mint);
+  background: rgba(86,166,123,0.14);
+}
+[data-ui-style=liquid][data-theme=dark] .perm-card-risk-badge[data-risk="medium"] {
+  color: var(--honey);
+  background: rgba(234,187,88,0.16);
+}
+[data-ui-style=liquid][data-theme=dark] .perm-card-risk-badge[data-risk="high"] {
+  color: var(--coral);
+  background: rgba(210,95,80,0.16);
+}
+
 [data-ui-style=liquid][data-theme=dark] .note,
 [data-ui-style=liquid][data-theme=dark] .subtle,
 [data-ui-style=liquid][data-theme=dark] .stat-label,
@@ -3899,7 +4067,14 @@ input[type="range"]:active::-webkit-slider-thumb,
 [data-theme=dark] .thought-bubble { background: rgba(30, 26, 22, 0.94); color: var(--ink); }
 [data-theme=dark] .thought-bubble::before,
 [data-theme=dark] .thought-bubble::after { background: rgba(30, 26, 22, 0.94); }
-[data-theme=dark] .perm-card { background: rgba(10, 8, 6, 0.96); }
+[data-theme=dark] .perm-card { background: rgba(10, 8, 6, 0.96); border-color: rgba(234, 187, 88, 0.18); }
+[data-theme=dark] .perm-card-title { color: #f4eadf; }
+[data-theme=dark] .perm-card-tool-name { color: #fff5d9; }
+[data-theme=dark] .perm-card-tool-detail { color: #a0b098; background: rgba(0, 0, 0, 0.32); }
+[data-theme=dark] .perm-card-btn-deny { background: rgba(210, 95, 80, 0.1); border-color: rgba(210, 95, 80, 0.26); color: #d89088; }
+[data-theme=dark] .perm-card-btn-deny:hover { background: rgba(210, 95, 80, 0.2); border-color: rgba(210, 95, 80, 0.4); }
+[data-theme=dark] .perm-card-btn-allow { background: rgba(86, 166, 123, 0.12); border-color: rgba(86, 166, 123, 0.3); color: #98d8a8; }
+[data-theme=dark] .perm-card-btn-allow:hover { background: rgba(86, 166, 123, 0.24); border-color: rgba(86, 166, 123, 0.46); }
 [data-theme=dark] .hooks-result { background: rgba(255, 255, 255, 0.04); }
 [data-theme=dark] .idle-sprite-preview { background: rgba(255, 255, 255, 0.04); }
 [data-theme=dark] .clawd-idle-dropdown { background: var(--paper); }
@@ -4037,10 +4212,8 @@ input[type="range"]:active::-webkit-slider-thumb,
 [data-theme=dark] ::-webkit-scrollbar-track { background: transparent; }
 [data-theme=dark] ::-webkit-scrollbar-thumb { background: rgba(232, 221, 208, 0.2); }
 [data-theme=dark] ::-webkit-scrollbar-thumb:hover { background: rgba(232, 221, 208, 0.3); }
-[data-theme=dark] .perm-card-detail { color: #a0b098; }
 [data-theme=dark] .bubble p { color: #b0a898; }
 [data-theme=dark] .bubble-detail { background: rgba(0, 0, 0, 0.6); }
-[data-theme=dark] .perm-card-topbar { border-bottom-color: rgba(212, 168, 74, 0.2); }
 
 /* --- Dark theme plugin workbench & detail overrides --- */
 [data-theme=dark] .plugins-workbench-header { background: radial-gradient(circle at top left, rgba(234,187,88,.14), transparent 42%), rgba(255,255,255,0.04); border-color: var(--line); box-shadow: 0 18px 50px rgba(0,0,0,0.16); }

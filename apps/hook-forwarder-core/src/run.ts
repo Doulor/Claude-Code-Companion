@@ -42,12 +42,7 @@ export async function runForwarder(options: RunOptions): Promise<void> {
 
   if (provider.isPermissionEvent(payload)) {
     try {
-      // For permission events we need the tool+detail. The provider didn't
-      // surface them, so we extract a couple of common fields directly.
-      const tool = String(text(payload.tool_name) ?? text(payload.toolName) ?? "Unknown");
-      const detail = text(payload.tool_input)
-        ? JSON.stringify(payload.tool_input).slice(0, 200)
-        : undefined;
+      const { tool, detail } = provider.permissionDetail(payload, { privacyMode, clientType, clientLabel });
       const sessionId = text(payload.session_id) ?? text(payload.sessionId);
       const result = await requestPermission(tool, detail, sessionId, payload, port, token, 120000);
       if (result.decision === "allow" || result.decision === "deny") {

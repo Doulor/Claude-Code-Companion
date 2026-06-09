@@ -39,6 +39,7 @@ const companionApi = {
     return () => { ipcRenderer.off("companion:connection", handler); };
   },
   setPetInteractive: (interactive: boolean) => ipcRenderer.invoke("window:pet-interactive", interactive) as Promise<void>,
+  updatePermissionCardRect: (rect: { x: number; y: number; width: number; height: number } | null) => ipcRenderer.invoke("window:permission-card-rect", rect) as Promise<void>,
   dragPetTo: (x: number, y: number) => ipcRenderer.invoke("window:drag-pet", { x, y }) as Promise<void>,
   movePetBy: (dx: number, dy: number) => ipcRenderer.invoke("window:move-pet-by", { dx, dy }) as Promise<void>,
   onPermissionRequest: (callback: (request: PermissionRequest) => void) => {

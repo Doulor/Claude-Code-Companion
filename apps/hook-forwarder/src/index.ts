@@ -151,14 +151,15 @@ export function basename(pathLike: string | undefined): string | undefined {
   return parts.at(-1);
 }
 
-export function detailForTool(payload: HookPayload, tool: ToolName): string | undefined {
-  if (privacyMode === "safe") return undefined;
+export function detailForTool(payload: HookPayload, tool: ToolName, overrideMode?: "safe" | "standard" | "detailed"): string | undefined {
+  const mode = overrideMode ?? privacyMode;
+  if (mode === "safe") return undefined;
   const input = asObject(payload.tool_input);
   if (tool === "Read" || tool === "Edit" || tool === "Write" || tool === "Notebook") return basename(text(input.file_path) ?? text(input.path));
   if (tool === "Grep") return text(input.pattern) ? "pattern: " + text(input.pattern) : undefined;
   if (tool === "Glob") return text(input.pattern) ? "pattern: " + text(input.pattern) : undefined;
   if (tool === "WebSearch") return text(input.query) ? "query: " + text(input.query) : undefined;
-  if (tool === "Bash") return privacyMode === "detailed" ? summarizeCommand(text(input.command)) : undefined;
+  if (tool === "Bash") return mode === "detailed" ? summarizeCommand(text(input.command)) : undefined;
   if (tool === "Agent") {
     const prompt = text(input.prompt);
     return prompt ? (prompt.length > 40 ? prompt.slice(0, 37) + "..." : prompt) : undefined;
@@ -286,7 +287,7 @@ export function isPermissionEvent(payload: HookPayload): boolean {
   if (hook !== "PreToolUse") return false;
   // permission_mode 字段缺失时（子 agent 派发场景），不介入权限流程
   const permMode = text(payload.permission_mode) ?? text(payload.permissionMode);
-  if (permMode === undefined) return false;
+  if (!permMode) return false;
   // 权限已跳过时不介入：bypassPermissions / dontAsk / auto 模式下 Claude Code 不需要外部确认
   if (permMode === "bypassPermissions" || permMode === "dontAsk" || permMode === "auto") return false;
   return true;
@@ -300,7 +301,8 @@ interface PermissionPollResult {
 
 export function requestPermission(payload: HookPayload): Promise<PermissionPollResult> {
   const tool = toolName(payload);
-  const detail = detailForTool(payload, tool);
+  // 权限请求必须显示完整详情，不受 privacyMode 限制
+  const detail = detailForTool(payload, tool, "detailed");
   const sessionId = text(payload.session_id) ?? text(payload.sessionId);
   const permissionTimeout = Number(process.env.CLAWD_PERMISSION_TIMEOUT ?? "120000");
 

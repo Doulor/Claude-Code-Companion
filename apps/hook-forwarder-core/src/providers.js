@@ -155,10 +155,18 @@ export const claudeCodeProvider = {
     isPermissionEvent(payload) {
         if (claudeHookName(payload) !== "PreToolUse")
             return false;
-        const permMode = text(payload.permission_mode) ?? text(payload.permissionMode) ?? "";
+        const permMode = text(payload.permission_mode) ?? text(payload.permissionMode);
+        // permission_mode 缺失（子 agent）或为空字符串时不介入
+        if (!permMode)
+            return false;
         if (permMode === "bypassPermissions" || permMode === "dontAsk" || permMode === "auto")
             return false;
         return true;
+    },
+    permissionDetail(payload, _env) {
+        const tool = claudeToolName(payload);
+        const detail = claudeDetailForTool(payload, tool, "detailed");
+        return { tool: String(tool), detail };
     },
     formatPermissionDecision(decision, reason) {
         return JSON.stringify({
@@ -288,6 +296,11 @@ export const codexProvider = {
     },
     isPermissionEvent(payload) {
         return codexHookName(payload) === "PermissionRequest";
+    },
+    permissionDetail(payload, _env) {
+        const tool = codexToolName(payload);
+        const detail = codexDetailForTool(payload, tool, "detailed");
+        return { tool: String(tool), detail };
     },
     formatPermissionDecision(decision, reason) {
         return JSON.stringify({

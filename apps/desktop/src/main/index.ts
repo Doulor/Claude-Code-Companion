@@ -47,6 +47,8 @@ let settings: CompanionSettings = defaultSettings;
 let eventServer: ReturnType<typeof createServer> | null = null;
 let petWidgetHitTestTimer: NodeJS.Timeout | null = null;
 let petWidgetHitTestInteractive = false;
+let petWindowAlwaysOnTop = false;
+let permissionCardRect: { x: number; y: number; width: number; height: number } | null = null;
 let wsServer: WebSocketServer | null = null;
 let serverListening = false;
 let serverError: string | undefined;
@@ -279,12 +281,11 @@ function clampPetPosition(x: number, y: number) {
 function keepPetOnTop() {
   if (!petWindow || petWindow.isDestroyed()) return;
   if (!settings.petEnabled) return;
-  if (settings.alwaysOnTop) {
-    petWindow.setAlwaysOnTop(true, "screen-saver");
-    petWindow.moveTop();
-  } else {
-    petWindow.setAlwaysOnTop(false);
-  }
+  const shouldStayOnTop = settings.alwaysOnTop || permissionBroker.size > 0;
+  if (petWindowAlwaysOnTop === shouldStayOnTop) return;
+  petWindowAlwaysOnTop = shouldStayOnTop;
+  petWindow.setAlwaysOnTop(shouldStayOnTop, "screen-saver");
+  if (shouldStayOnTop) petWindow.moveTop();
 }
 
 function startPetWidgetHitTesting() {
@@ -323,6 +324,11 @@ function isMouseOverPluginWidget(): boolean {
       const top = anchorBottom - height + offset.y * scale;
       if (point.x >= left - 12 && point.x <= left + width + 12 && point.y >= top - 18 && point.y <= top + height + 12) return true;
     }
+  }
+  if (permissionCardRect) {
+    const r = permissionCardRect;
+    const pad = 8;
+    if (point.x >= r.x - pad && point.x <= r.x + r.width + pad && point.y >= r.y - pad && point.y <= r.y + r.height + pad) return true;
   }
   return false;
 }
@@ -556,6 +562,7 @@ function startEventServer() {
             timestamp,
             rawPayload: body.rawPayload
           });
+          keepPetOnTop();
           settingsWindow?.webContents.send("companion:permission-request", {
             id,
             toolName: body.toolName,
@@ -564,6 +571,12 @@ function startEventServer() {
             timestamp,
             rawPayload: body.rawPayload
           });
+
+          const permRule = settings.notificationRules?.find(r => r.eventType === "permission_wait" && r.enabled);
+          if (permRule?.playSound && settings.notificationsEnabled) {
+            const soundDataUrl = getSoundDataUrl("permission_wait", settings.sound);
+            if (soundDataUrl) playSoundDataUrl(soundDataUrl);
+          }
 
           writeJson(res, 200, { id, status: "pending" });
         } catch (error) {
@@ -674,6 +687,11 @@ function runPluginsForEvent(event: CompanionEvent) {
   }
 }
 
+function playSoundDataUrl(soundDataUrl: string) {
+  petWindow?.webContents.send("companion:play-sound", soundDataUrl);
+  settingsWindow?.webContents.send("companion:play-sound", soundDataUrl);
+}
+
 function emitEvent(event: CompanionEvent) {
   trackEvent(event);
   eventHistoryStore = appendEventHistory(eventHistoryStore, event, settings.eventHistoryLimit ?? 40);
@@ -706,10 +724,7 @@ function emitEvent(event: CompanionEvent) {
 
   if (shouldPlaySound) {
     const soundDataUrl = getSoundDataUrl(event.event, settings.sound);
-    if (soundDataUrl) {
-      petWindow?.webContents.send("companion:play-sound", soundDataUrl);
-      settingsWindow?.webContents.send("companion:play-sound", soundDataUrl);
-    }
+    if (soundDataUrl) playSoundDataUrl(soundDataUrl);
   }
 }
 
@@ -826,6 +841,7 @@ ipcMain.handle("permission:respond", async (_, response: PermissionResponse) => 
     detail: pending.toolDetail,
     timestamp: Date.now()
   });
+  keepPetOnTop();
   return { success: true };
 });
 ipcMain.handle("window:open-settings", () => createSettingsWindow());
@@ -838,6 +854,14 @@ ipcMain.handle("window:toggle-maximize-settings", () => {
 ipcMain.handle("window:close-settings", () => settingsWindow?.close());
 ipcMain.handle("window:pet-interactive", (_, interactive: boolean) => {
   petWindow?.setIgnoreMouseEvents(!interactive, { forward: true });
+});
+ipcMain.handle("window:permission-card-rect", (_, rect: { x: number; y: number; width: number; height: number } | null) => {
+  if (!rect || !petWindow || petWindow.isDestroyed()) {
+    permissionCardRect = null;
+    return;
+  }
+  const bounds = petWindow.getBounds();
+  permissionCardRect = { ...rect, x: bounds.x + rect.x, y: bounds.y + rect.y };
 });
 ipcMain.handle("window:drag-pet", (_, position: { x: number; y: number }) => {
   const clamped = clampPetPosition(position.x, position.y);
