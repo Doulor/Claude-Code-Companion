@@ -72,7 +72,16 @@ export function PluginsPage({ settings, updateSettings }: { settings: CompanionS
         onInstall={marketItem ? () => void install(marketItem.id) : undefined}
         onRemove={plugin ? () => removePlugin(plugin.id) : undefined}
         onPatchPlugin={patch => plugin ? patchPlugin(plugin.id, patch) : undefined}
-        onRunNow={plugin ? async () => { const result = await window.companion.runPluginNow(plugin.id); void refresh(); return result; } : undefined}
+        onRunNow={plugin ? async action => {
+          const result = await window.companion.runPluginNow(plugin.id, action);
+          void refresh();
+          if (result.runId) {
+            const allRuns = await window.companion.getPluginRuns();
+            const record = allRuns.find(run => run.id === result.runId);
+            return { ...result, record };
+          }
+          return result;
+        } : undefined}
       />
     );
   }

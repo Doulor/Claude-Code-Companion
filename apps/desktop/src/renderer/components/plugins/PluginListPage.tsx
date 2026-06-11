@@ -81,7 +81,7 @@ function InstalledCard({ plugin, run, zh, onOpen, onPatch }: { plugin: CustomPlu
   return (
     <article className={`plugin-card ${plugin.enabled ? "enabled" : ""} ${plugin.enabled && !plugin.trusted && script ? "needs-trust" : ""}`} onClick={onOpen}>
       <div className="plugin-card-top">
-        <div><h4>{title}</h4><p>{desc ?? (zh ? "本地自定义插件" : "Custom local plugin")}</p></div>
+        <div><h4>{title}{(plugin.devBadge || plugin.manifest?.devBadge) ? <span className="dev-badge">Dev</span> : null}</h4><p>{desc ?? (zh ? "本地自定义插件" : "Custom local plugin")}</p></div>
         <div onClick={e => e.stopPropagation()}><Toggle label="" checked={plugin.enabled} onChange={enabled => onPatch({ enabled })} /></div>
       </div>
       <div className="plugin-status-badges">
@@ -98,7 +98,7 @@ function InstalledCard({ plugin, run, zh, onOpen, onPatch }: { plugin: CustomPlu
 function MarketCard({ item, installed, zh, onOpen }: { item: PluginMarketItem; installed: boolean; zh: boolean; onOpen: () => void }) {
   return (
     <article className={`plugin-card market ${installed ? "installed" : ""}`} onClick={onOpen}>
-      <div className="plugin-card-top"><div><h4>{zh ? item.nameZh ?? item.name : item.name}</h4><p>{zh ? item.descriptionZh ?? item.description : item.description}</p></div></div>
+      <div className="plugin-card-top"><div><h4>{zh ? item.nameZh ?? item.name : item.name}{item.devBadge ? <span className="dev-badge">Dev</span> : null}</h4><p>{zh ? item.descriptionZh ?? item.description : item.description}</p></div></div>
       <div className="plugin-status-badges"><span>{installed ? (zh ? "已安装" : "Installed") : (zh ? "市场" : "Market")}</span>{item.tags.slice(0, 3).map(tag => <span key={tag}>{tag}</span>)}</div>
     </article>
   );

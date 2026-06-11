@@ -1090,17 +1090,19 @@ ipcMain.handle("plugins:get", () => (settings.customPlugins ?? []).map(p => {
   return normalized;
 }));
 ipcMain.handle("plugins:get-runs", () => pluginRuns);
-ipcMain.handle("plugins:run-now", (_, pluginId: string) => {
+ipcMain.handle("plugins:run-now", (_, pluginId: string, action?: string) => {
   const plugin = (settings.customPlugins ?? []).find(p => p.id === pluginId);
   if (!plugin) return { ok: false, error: "Plugin not found" };
   if (!plugin.trusted) return { ok: false, error: "Plugin not trusted" };
   if (!plugin.scriptPath || !existsSync(plugin.scriptPath)) return { ok: false, error: "Script not found" };
   const dummyEvent: CompanionEvent = { id: `manual-${Date.now()}`, source: "manual", event: "done", title: "Manual run", message: "Triggered by user", timestamp: Date.now() };
-  runPlugin(normalizePlugin(plugin), dummyEvent, record => {
-    pluginRuns = appendPluginRun(pluginRuns, record);
-    settingsWindow?.webContents.send("companion:plugin-run", record);
-  }, pluginDataDir, true);
-  return { ok: true };
+  return new Promise<{ ok: boolean; runId?: string; error?: string }>(resolve => {
+    runPlugin(normalizePlugin(plugin), dummyEvent, record => {
+      pluginRuns = appendPluginRun(pluginRuns, record);
+      settingsWindow?.webContents.send("companion:plugin-run", record);
+      resolve({ ok: record.exitCode === 0 && !record.timedOut, runId: record.id, error: record.stderr || undefined });
+    }, pluginDataDir, true, action);
+  });
 });
 ipcMain.handle("plugins:open-data-dir", (_, pluginId: string) => {
   const dir = join(pluginDataDir, pluginId);

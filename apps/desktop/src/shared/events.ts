@@ -347,6 +347,7 @@ export interface PluginManifest {
   widgets?: PluginWidgetDescriptor[];
   readme?: string;
   readmeZh?: string;
+  devBadge?: boolean;
 }
 
 export interface PluginRunRecord {
@@ -381,6 +382,7 @@ export interface CustomPlugin {
   readme?: string;
   readmeZh?: string;
   widgetOffsets?: Record<string, { x: number; y: number }>;
+  devBadge?: boolean;
 }
 
 export interface PluginMarketItem {
@@ -400,6 +402,7 @@ export interface PluginMarketItem {
   events: string[];
   permissions: PluginPermission[];
   tags: string[];
+  devBadge?: boolean;
 }
 
 export interface PluginMarketIndex {

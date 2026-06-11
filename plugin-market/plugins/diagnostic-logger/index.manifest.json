@@ -1,0 +1,57 @@
+{
+  "name": "Diagnostic Logger",
+  "nameZh": "诊断日志",
+  "description": "Generate a detailed local diagnostic report for Clawd Companion support cases.",
+  "descriptionZh": "为 Clawd Companion 支持与排障场景生成详细本地诊断报告。",
+  "events": ["error", "done", "session_start", "permission_wait"],
+  "permissions": ["filesystem", "shell"],
+  "timeoutMs": 60000,
+  "devBadge": true,
+  "settings": [
+    {
+      "key": "includeFullRuntimeLog",
+      "label": "Include full runtime log",
+      "labelZh": "包含完整 runtime.log",
+      "type": "toggle",
+      "default": true,
+      "description": "Include the full runtime.log instead of only the tail. Useful for hard-to-reproduce problems."
+    },
+    {
+      "key": "includeEventHistoryTail",
+      "label": "Include event history tail",
+      "labelZh": "包含最近事件历史",
+      "type": "toggle",
+      "default": true,
+      "description": "Include recent event metadata from event-history.json."
+    },
+    {
+      "key": "eventHistoryLimit",
+      "label": "Event history entries",
+      "labelZh": "事件历史条数",
+      "type": "number",
+      "default": 120,
+      "min": 20,
+      "max": 500,
+      "step": 20,
+      "description": "Maximum recent event entries included in the report."
+    },
+    {
+      "key": "includeSettings",
+      "label": "Include settings snapshot",
+      "labelZh": "包含设置快照",
+      "type": "toggle",
+      "default": true,
+      "description": "Include Clawd settings with local token-like fields redacted."
+    },
+    {
+      "key": "includeDirectoryTree",
+      "label": "Include install/data file listing",
+      "labelZh": "包含安装/数据文件列表",
+      "type": "toggle",
+      "default": true,
+      "description": "List relevant files in app data, plugin data, and install resource folders when visible."
+    }
+  ],
+  "readme": "# Diagnostic Logger\n\nGenerate detailed local logs, then analyze the newest generated log with built-in diagnosis rules.\n\n## How to use\n\n1. Install this plugin from the market.\n2. Open the plugin detail page.\n3. Turn on **Trusted for scripts** and **Enabled**.\n4. Click **Generate logs** to write a fresh `clawd-log-*.md/json` snapshot.\n5. Click **Run diagnosis** to read the newest log snapshot and write a `clawd-diagnosis-*.md/json` summary.\n\n## What diagnosis checks\n\n- Runtime log warnings, load failures, missing assets, renderer errors, and plugin execution problems\n- Pet visibility settings such as opacity, scale, enabled state, click-through, and position offsets\n- Invalid idle/action animation sprite mappings and sprite override plugins\n- Hook/source connection problems, permission UI flow problems, update problems, and JSON/settings parse errors\n- Recent event-history, stats health, OS, process, memory, environment hints, and relevant file listings\n\n## Privacy\n\nReports are written locally only. The plugin redacts token-like values and does not upload anything. Because this plugin is meant for local diagnosis, it intentionally collects verbose diagnostic metadata.",
+  "readmeZh": "# 诊断日志\n\n先生成详细本地日志，再用内置诊断规则分析最新日志。\n\n## 使用方式\n\n1. 从插件市场安装本插件。\n2. 打开插件详情页。\n3. 打开 **信任脚本执行** 和 **启用**。\n4. 点击 **生成日志**，写入最新的 `clawd-log-*.md/json` 快照。\n5. 点击 **一键诊断**，读取最新日志快照并生成 `clawd-diagnosis-*.md/json` 总结。\n\n## 诊断会检查什么\n\n- 运行日志里的 warning、加载失败、资源缺失、渲染错误和插件执行异常\n- 桌宠可见性设置，例如透明度、缩放、启用状态、点击穿透、位置偏移\n- 无效的待机/动作动画 sprite 映射，以及启用中的 sprite 覆盖插件\n- Hook/数据源连接问题、权限卡片流程问题、更新问题、JSON/设置解析错误\n- 最近事件历史、统计数据、OS、进程、内存、环境变量线索和相关文件列表\n\n## 隐私\n\n报告只写入本地，不会上传任何内容。插件会遮蔽 token 类字段。因为它面向本地诊断，所以会刻意收集比较详细的诊断元数据。"
+}

@@ -1,0 +1,65 @@
+{
+  "sourceLog": "D:\\build\\GitLocal\\Clawd-Companion\\plugin-market\\plugins\\diagnostic-logger\\test-output\\clawd-log-20260610-130656.json",
+  "diagnosis": {
+    "findings": [
+      {
+        "level": "warn",
+        "title": "runtime.log contains suspicious lines",
+        "detail": "334 warning/error-like lines found.",
+        "suggestion": "Open the log report and inspect Runtime log summary."
+      },
+      {
+        "level": "error",
+        "title": "Renderer JavaScript error detected",
+        "detail": "[2026-06-10T04:33:23.319Z] settings console(3): [Renderer] Unhandled React error ReferenceError: generating is not defined [object Object]",
+        "evidence": [
+          "[2026-06-10T03:27:09.061Z] settings console(3): Uncaught (in promise) Error: Error invoking remote method 'settings:save': TypeError: Object has been destroyed",
+          "[2026-06-10T03:27:09.642Z] settings console(3): Uncaught (in promise) Error: Error invoking remote method 'settings:save': TypeError: Object has been destroyed",
+          "[2026-06-10T03:27:09.913Z] settings console(3): Uncaught (in promise) Error: Error invoking remote method 'settings:save': TypeError: Object has been destroyed",
+          "[2026-06-10T03:27:11.034Z] settings console(3): Uncaught (in promise) Error: Error invoking remote method 'settings:save': TypeError: Object has been destroyed",
+          "[2026-06-10T04:33:23.319Z] settings console(3): [Renderer] Unhandled React error ReferenceError: generating is not defined [object Object]"
+        ],
+        "suggestion": "Open the latest log report and inspect renderer console lines around this error."
+      },
+      {
+        "level": "warn",
+        "title": "Plugin execution problem detected",
+        "detail": "12 plugin runtime lines matched.",
+        "evidence": [
+          "[2026-06-09T16:07:55.385Z] Plugin exited: Daily Report code=null duration=60039ms timed-out",
+          "[2026-06-10T04:14:02.298Z] Plugin exited: Diagnostic Logger code=null duration=20044ms timed-out",
+          "[2026-06-10T04:14:42.285Z] Plugin exited: Daily Report code=null duration=60047ms timed-out",
+          "[2026-06-10T04:41:35.131Z] Plugin exited: Diagnostic Logger code=null duration=20032ms timed-out",
+          "[2026-06-10T04:42:15.121Z] Plugin exited: Daily Report code=null duration=60034ms timed-out"
+        ],
+        "suggestion": "Check plugin trust/enabled state and the Recent runs stderr output."
+      },
+      {
+        "level": "warn",
+        "title": "Settings or JSON parse problem detected",
+        "detail": "16 settings/JSON error lines matched.",
+        "evidence": [
+          "[2026-06-10T03:27:09.061Z] settings console(3): Uncaught (in promise) Error: Error invoking remote method 'settings:save': TypeError: Object has been destroyed",
+          "[2026-06-10T03:27:09.642Z] settings console(3): Uncaught (in promise) Error: Error invoking remote method 'settings:save': TypeError: Object has been destroyed",
+          "[2026-06-10T03:27:09.913Z] settings console(3): Uncaught (in promise) Error: Error invoking remote method 'settings:save': TypeError: Object has been destroyed",
+          "[2026-06-10T03:27:11.034Z] settings console(3): Uncaught (in promise) Error: Error invoking remote method 'settings:save': TypeError: Object has been destroyed",
+          "[2026-06-10T04:33:23.319Z] settings console(3): [Renderer] Unhandled React error ReferenceError: generating is not defined [object Object]"
+        ],
+        "suggestion": "Export settings, then try reset/import only after keeping a backup."
+      },
+      {
+        "level": "info",
+        "title": "Click-through is enabled",
+        "detail": "This should not hide Clawd, but it can make dragging/testing feel confusing.",
+        "suggestion": "Disable click-through while debugging positioning."
+      }
+    ],
+    "summary": {
+      "total": 5,
+      "errors": 1,
+      "warnings": 3,
+      "info": 1,
+      "topFinding": "runtime.log contains suspicious lines"
+    }
+  }
+}

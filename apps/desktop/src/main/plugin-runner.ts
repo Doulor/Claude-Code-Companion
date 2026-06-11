@@ -24,7 +24,8 @@ export function readPluginManifest(scriptPath: string): PluginManifest | null {
     assets: parsed.assets && typeof parsed.assets === "object" ? { sprites: typeof parsed.assets.sprites === "string" ? parsed.assets.sprites : undefined } : undefined,
     widgets: Array.isArray(parsed.widgets) ? parsed.widgets.filter(isValidWidgetDescriptor) : undefined,
     readme: typeof parsed.readme === "string" ? parsed.readme : undefined,
-    readmeZh: typeof parsed.readmeZh === "string" ? parsed.readmeZh : undefined
+    readmeZh: typeof parsed.readmeZh === "string" ? parsed.readmeZh : undefined,
+    devBadge: typeof parsed.devBadge === "boolean" ? parsed.devBadge : undefined
   };
 }
 
@@ -88,7 +89,7 @@ export function canRunPlugin(plugin: CustomPlugin, event: CompanionEvent): { ok:
   return { ok: true };
 }
 
-export function runPlugin(plugin: CustomPlugin, event: CompanionEvent, onRecord: (record: PluginRunRecord) => void, dataDir?: string, force?: boolean): void {
+export function runPlugin(plugin: CustomPlugin, event: CompanionEvent, onRecord: (record: PluginRunRecord) => void, dataDir?: string, force?: boolean, action?: string): void {
   const startedAt = Date.now();
   const permissionSet = new Set(plugin.permissions ?? []);
   const pluginDir = dirname(plugin.scriptPath);
@@ -105,7 +106,8 @@ export function runPlugin(plugin: CustomPlugin, event: CompanionEvent, onRecord:
       CLAWD_PLUGIN_SETTINGS: JSON.stringify(plugin.settings ?? {}),
       CLAWD_PLUGIN_DIR: pluginDir,
       CLAWD_PLUGIN_DATA_DIR: pluginDataDir,
-      ...(force ? { CLAWD_PLUGIN_FORCE: "1" } : {})
+      ...(force ? { CLAWD_PLUGIN_FORCE: "1" } : {}),
+      ...(action ? { CLAWD_PLUGIN_ACTION: action } : {})
     }
   });
 

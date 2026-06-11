@@ -1161,10 +1161,6 @@ function SettingsApp() {
           <GroupCard icon={<PlugZap size={18} />} title={t("sections.sources", "数据源（Sources）")}>
             <SourcesPanel />
           </GroupCard>
-          <GroupCard icon={<PlugZap size={18} />} title={t("sections.claudeConnection", "Claude Code 连接")}>
-            <HooksManager />
-          </GroupCard>
-
           <GroupCard icon={<Radio size={18} />} title={t("sections.connectionDetails", "连接详情")}>
             <div className="connection-detail-grid">
               <ConnectionDetail label={t("fields.status", "状态")} value={connection.connected ? t("status.connected", "已连接") : connection.serverListening ? t("status.waiting", "等待 Claude 会话") : t("status.notListening", "本地服务未监听")} />

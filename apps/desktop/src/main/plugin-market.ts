@@ -36,7 +36,8 @@ function parseMarketItem(value: unknown): PluginMarketItem {
     manifest,
     events: Array.isArray(raw.events) ? raw.events.filter((v): v is string => typeof v === "string") : [],
     permissions: Array.isArray(raw.permissions) ? raw.permissions.filter((v): v is PluginMarketItem["permissions"][number] => v === "event" || v === "network" || v === "filesystem" || v === "shell") : [],
-    tags: Array.isArray(raw.tags) ? raw.tags.filter((v): v is string => typeof v === "string") : []
+    tags: Array.isArray(raw.tags) ? raw.tags.filter((v): v is string => typeof v === "string") : [],
+    devBadge: typeof raw.devBadge === "boolean" ? raw.devBadge : undefined
   };
 }
 
@@ -91,7 +92,8 @@ export function installMarketPlugin(pluginRoot: string, item: PluginMarketItem, 
     version: item.version,
     author: item.author,
     readme: item.readme ?? manifest.readme,
-    readmeZh: item.readmeZh ?? manifest.readmeZh
+    readmeZh: item.readmeZh ?? manifest.readmeZh,
+    devBadge: item.devBadge || manifest.devBadge || undefined
   };
 }
 

@@ -79,6 +79,7 @@ export function SourcesPanel() {
 
   return (
     <div className="sources-panel">
+      <p className="note sources-note">{t("doctor.backupNote", "安装 hooks 后，CLI 会自动将事件发送到 Clawd Companion。备份文件保存在 ~/.claude/settings.clawd-backup.json")}</p>
       {ids.map((id) => {
         const info = providers[id];
         const meta = PROVIDER_META[id] ?? { label: id, tagline: "", Icon: PlugZap };
